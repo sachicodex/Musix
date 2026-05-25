@@ -1,0 +1,208 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidStringList(value) {
+      return value is list;
+    }
+
+    function isValidPreferenceProfile(value) {
+      return value is map &&
+          value.keys().hasOnly([
+            'profileVersion',
+            'artistKeys',
+            'genreKeys',
+            'moodKeys',
+            'languageKeys',
+            'yearKeys',
+            'prefersRecentYears',
+            'completedListenCount',
+            'artistScores',
+            'genreScores',
+            'moodScores',
+            'languageScores',
+            'languageConfidenceScores',
+            'yearScores',
+            'avoidedArtistScores',
+            'avoidedGenreScores',
+            'avoidedMoodScores',
+            'avoidedLanguageScores',
+            'avoidedYearScores',
+            'recentArtistScores',
+            'recentGenreScores',
+            'recentMoodScores',
+            'recentLanguageScores',
+            'recentYearScores',
+            'skipArtistScores',
+            'skipGenreScores',
+            'skipMoodScores',
+            'skipLanguageScores',
+            'skipYearScores',
+            'energyScores',
+            'sessionContextScores',
+            'sourceWeights',
+            'noveltyPreference',
+            'popularityPreference',
+            'repeatAffinity',
+            'primaryLanguage',
+            'secondaryLanguages',
+            'preferredYearFloor'
+          ]) &&
+          isValidStringList(value.artistKeys) &&
+          isValidStringList(value.genreKeys) &&
+          isValidStringList(value.moodKeys) &&
+          isValidStringList(value.languageKeys) &&
+          (!('profileVersion' in value) || value.profileVersion is int) &&
+          (!('yearKeys' in value) || isValidStringList(value.yearKeys)) &&
+          value.prefersRecentYears is bool &&
+          (!('completedListenCount' in value) ||
+              value.completedListenCount is int) &&
+          (!('artistScores' in value) || value.artistScores is map) &&
+          (!('genreScores' in value) || value.genreScores is map) &&
+          (!('moodScores' in value) || value.moodScores is map) &&
+          (!('languageScores' in value) || value.languageScores is map) &&
+          (!('languageConfidenceScores' in value) ||
+              value.languageConfidenceScores is map) &&
+          (!('yearScores' in value) || value.yearScores is map) &&
+          (!('avoidedArtistScores' in value) ||
+              value.avoidedArtistScores is map) &&
+          (!('avoidedGenreScores' in value) ||
+              value.avoidedGenreScores is map) &&
+          (!('avoidedMoodScores' in value) ||
+              value.avoidedMoodScores is map) &&
+          (!('avoidedLanguageScores' in value) ||
+              value.avoidedLanguageScores is map) &&
+          (!('avoidedYearScores' in value) ||
+              value.avoidedYearScores is map) &&
+          (!('recentArtistScores' in value) ||
+              value.recentArtistScores is map) &&
+          (!('recentGenreScores' in value) ||
+              value.recentGenreScores is map) &&
+          (!('recentMoodScores' in value) ||
+              value.recentMoodScores is map) &&
+          (!('recentLanguageScores' in value) ||
+              value.recentLanguageScores is map) &&
+          (!('recentYearScores' in value) ||
+              value.recentYearScores is map) &&
+          (!('skipArtistScores' in value) ||
+              value.skipArtistScores is map) &&
+          (!('skipGenreScores' in value) ||
+              value.skipGenreScores is map) &&
+          (!('skipMoodScores' in value) ||
+              value.skipMoodScores is map) &&
+          (!('skipLanguageScores' in value) ||
+              value.skipLanguageScores is map) &&
+          (!('skipYearScores' in value) ||
+              value.skipYearScores is map) &&
+          (!('energyScores' in value) || value.energyScores is map) &&
+          (!('sessionContextScores' in value) ||
+              value.sessionContextScores is map) &&
+          (!('sourceWeights' in value) || value.sourceWeights is map) &&
+          (!('noveltyPreference' in value) ||
+              value.noveltyPreference is number) &&
+          (!('popularityPreference' in value) ||
+              value.popularityPreference is number) &&
+          (!('repeatAffinity' in value) ||
+              value.repeatAffinity is number) &&
+          (!('primaryLanguage' in value) || value.primaryLanguage is string) &&
+          (!('secondaryLanguages' in value) ||
+              isValidStringList(value.secondaryLanguages)) &&
+          (!('preferredYearFloor' in value) ||
+              value.preferredYearFloor is int);
+    }
+
+    function isValidUserDocument() {
+      return request.resource.data.keys().hasOnly([
+            'email',
+            'likedSongs',
+            'dislikedSongs',
+            'preferenceProfile',
+            'schemaVersion',
+            'updatedAt'
+          ]) &&
+          request.resource.data.email is string &&
+          (!('schemaVersion' in request.resource.data) ||
+              request.resource.data.schemaVersion is int) &&
+          (!('likedSongs' in request.resource.data) ||
+              isValidStringList(request.resource.data.likedSongs)) &&
+          (!('dislikedSongs' in request.resource.data) ||
+              isValidStringList(request.resource.data.dislikedSongs)) &&
+          (!('preferenceProfile' in request.resource.data) ||
+              isValidPreferenceProfile(
+                request.resource.data.preferenceProfile,
+              ));
+    }
+
+    function isValidPlaylistDocument() {
+      return request.resource.data.keys().hasOnly([
+            'name',
+            'songIds',
+            'songCount',
+            'schemaVersion',
+            'createdAt',
+            'updatedAt'
+          ]) &&
+          request.resource.data.name is string &&
+          (!('songIds' in request.resource.data) ||
+              request.resource.data.songIds is list) &&
+          (!('songCount' in request.resource.data) ||
+              request.resource.data.songCount is int) &&
+          (!('schemaVersion' in request.resource.data) ||
+              request.resource.data.schemaVersion is int);
+    }
+
+    function isValidSongPreferenceDocument() {
+      return request.resource.data.keys().hasOnly([
+            'songId',
+            'state',
+            'updatedAt'
+          ]) &&
+          request.resource.data.songId is string &&
+          request.resource.data.state in ['liked', 'disliked', 'none'];
+    }
+
+    function isValidPlaylistSongDocument() {
+      return request.resource.data.keys().hasOnly([
+            'songId',
+            'position',
+            'updatedAt'
+          ]) &&
+          request.resource.data.songId is string &&
+          request.resource.data.position is int;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUserDocument();
+      allow delete: if isOwner(userId);
+
+      match /songPreferences/{songPreferenceId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) &&
+            isValidSongPreferenceDocument();
+        allow delete: if isOwner(userId);
+      }
+
+      match /playlists/{playlistId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidPlaylistDocument();
+        allow delete: if isOwner(userId);
+
+        match /songs/{songId} {
+          allow read: if isOwner(userId);
+          allow create, update: if isOwner(userId) &&
+              isValidPlaylistSongDocument();
+          allow delete: if isOwner(userId);
+        }
+      }
+    }
+  }
+}

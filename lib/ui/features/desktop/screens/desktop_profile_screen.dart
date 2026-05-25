@@ -1,0 +1,450 @@
+part of '../../../musix_ui.dart';
+
+class _DesktopProfileScreen extends StatelessWidget {
+  const _DesktopProfileScreen({
+    required this.controller,
+    required this.onPickRegion,
+  });
+
+  final MusixController controller;
+  final Future<void> Function() onPickRegion;
+
+  @override
+  Widget build(BuildContext context) {
+    final AuthService authService = context.read<AuthService>();
+    final int preloadNextSongCount = controller.preloadNextSongCount;
+    final String preloadNextSongsLabel = preloadNextSongCount == 0
+        ? 'Off'
+        : preloadNextSongCount.toString();
+    final String sleepTimerStatusLabel = controller.sleepTimerStatusLabel;
+    final String userName = authService.currentUserDisplayName;
+    final String userEmail = authService.currentUserEmail;
+    final String userId = authService.currentUserShortUid;
+    final bool emailVerified = authService.isCurrentUserEmailVerified;
+    final LibrarySong? currentStreamSong = controller.currentSong;
+    final PlaybackStreamInfo? currentStreamInfo =
+        controller.currentPlaybackStreamInfo;
+    final String currentStreamSizeLabel =
+        currentStreamSong != null && currentStreamInfo != null
+        ? controller.currentStreamSongDataLabel(
+            song: currentStreamSong,
+            info: currentStreamInfo,
+            fallbackLabel: currentStreamInfo.bitrateLabel,
+          )
+        : 'No active stream';
+
+    Future<void> signOutUser() async {
+      try {
+        await authService.signOut();
+        await controller.clearUserDataFromCloud();
+        if (!context.mounted) {
+          return;
+        }
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+          (Route<dynamic> route) => false,
+        );
+      } on AuthException catch (error) {
+        if (context.mounted) {
+          _showMusixSnackBar(context, error.message);
+        }
+      }
+    }
+
+    Future<void> pickPreloadCount() async {
+      final List<int> preloadOptions = List<int>.generate(
+        6,
+        (int value) => value,
+      );
+      final int? selected = await _showSettingsSelectionSheet<int, int>(
+        context: context,
+        title: 'Next song preload',
+        description: 'Keep upcoming songs ready so playback starts faster.',
+        selectedValue: preloadNextSongCount,
+        items: preloadOptions,
+        valueOf: (int value) => value,
+        titleOf: (int value) => value == 0 ? 'Off' : '$value songs',
+        subtitleOf: (int value) => switch (value) {
+          0 => 'Do not preload the queue',
+          1 => 'Prepare the next song only',
+          _ => 'Prepare the next $value songs',
+        },
+      );
+      if (selected == null) {
+        return;
+      }
+      await controller.setPreloadNextSongCount(selected);
+    }
+
+    Future<void> pickSleepTimer() async {
+      const List<int> sleepTimerOptions = <int>[0, 10, 20, 30, 45, 60];
+      final int? selected = await _showSettingsSelectionSheet<int, int>(
+        context: context,
+        title: 'Sleep timer',
+        description:
+            'Stops playback after the selected inactive time. The countdown only runs while music is playing and turns off when the app is reopened.',
+        selectedValue: controller.sleepTimerMinutes,
+        items: sleepTimerOptions,
+        valueOf: (int value) => value,
+        titleOf: (int value) => switch (value) {
+          0 => 'Off',
+          10 => '10 minutes',
+          20 => '20 minutes',
+          30 => '30 minutes',
+          45 => '45 minutes',
+          60 => '1 hour',
+          _ => '$value minutes',
+        },
+        subtitleOf: (int value) => switch (value) {
+          0 => 'Disable the inactivity sleep timer',
+          _ =>
+            'Tracks gestures and controls, and starts counting when playback starts',
+        },
+      );
+      if (selected == null) {
+        return;
+      }
+      await controller.setSleepTimerMinutes(selected);
+    }
+
+    return _DesktopPageScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _DesktopPanel(
+            padding: const EdgeInsets.all(24),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: MusixColors.surfaceBlack,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(15),
+                      child: Image.asset('assets/icons/Musix - Full.png'),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        userName.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                              color: _kTextPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        userEmail,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: MusixColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final bool stacked = constraints.maxWidth < 1160;
+              final Widget leftColumn = Column(
+                children: <Widget>[
+                  Container(
+                    decoration: musixPanelDecoration(
+                      color: MusixColors.surface,
+                      borderColor: MusixColors.surfaceEdge,
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            const Icon(
+                              Icons.person_outline_rounded,
+                              color: MusixColors.textMuted,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Account',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    color: _kTextPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        _ProfileRow(
+                          title: 'Email Verification',
+                          subtitle: emailVerified
+                              ? 'Your Firebase account email is verified.'
+                              : 'Email verification is currently not completed.',
+                          trailing: emailVerified ? 'Verified' : 'Pending',
+                        ),
+                        const Divider(
+                          color: MusixColors.surfaceEdge,
+                          height: 24,
+                        ),
+                        _ProfileRow(
+                          title: 'Firebase User ID',
+                          subtitle:
+                              'Short reference for your signed-in account.',
+                          trailing: userId,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    decoration: musixPanelDecoration(
+                      color: MusixColors.surface,
+                      borderColor: MusixColors.surfaceEdge,
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            const Icon(
+                              Icons.slow_motion_video_rounded,
+                              color: MusixColors.textMuted,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Playback',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    color: _kTextPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _DesktopSettingsActionRow(
+                          title: 'Next Song Preload',
+                          subtitle:
+                              'Off, or keep the next 1 to 5 songs ready to play',
+                          trailing: GestureDetector(
+                            onTap: pickPreloadCount,
+                            child: Text(
+                              preloadNextSongsLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
+                                    color: MusixColors.accent,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ),
+                          onTap: pickPreloadCount,
+                        ),
+                        const Divider(
+                          color: MusixColors.surfaceEdge,
+                          height: 24,
+                        ),
+                        _DesktopSettingsActionRow(
+                          title: 'Sleep Timer',
+                          subtitle:
+                              'Tracks gestures and controls, and starts counting when playback starts',
+                          trailing: GestureDetector(
+                            onTap: pickSleepTimer,
+                            child: Text(
+                              sleepTimerStatusLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
+                                    color: MusixColors.accent,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ),
+                          onTap: pickSleepTimer,
+                        ),
+                        const Divider(
+                          color: MusixColors.surfaceEdge,
+                          height: 24,
+                        ),
+                        _DesktopSettingsActionRow(
+                          title: 'Current Stream Source Size',
+                          subtitle: currentStreamSong == null
+                              ? 'Play a song to inspect the active source size.'
+                              : currentStreamSong.title,
+                          trailing: Text(
+                            currentStreamSizeLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  color: MusixColors.accent,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+
+              final Widget rightColumn = Column(
+                children: <Widget>[
+                  Container(
+                    decoration: musixPanelDecoration(
+                      color: MusixColors.surface,
+                      borderColor: MusixColors.surfaceEdge,
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            const Icon(
+                              Icons.public_rounded,
+                              color: MusixColors.textMuted,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Discovery Region',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    color: _kTextPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _DesktopSettingsActionRow(
+                          title: 'Region',
+                          subtitle:
+                              'Controls Trending Now and regional chart shelves',
+                          onTap: onPickRegion,
+                          trailing: Text(
+                            controller.preferredRegionLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  color: MusixColors.accent,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    decoration: musixPanelDecoration(
+                      color: MusixColors.surface,
+                      borderColor: MusixColors.surfaceEdge,
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'Pulse Audio v4.2.1-stable',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: MusixColors.textMuted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Proudly built for music enthusiasts.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: MusixColors.textMuted.withValues(
+                                  alpha: 0.8,
+                                ),
+                              ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'PRIVACY      TERMS      CREDITS',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: MusixColors.textMuted,
+                                letterSpacing: 1.4,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        const SizedBox(height: 18),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: signOutUser,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(46),
+                              side: const BorderSide(
+                                color: MusixColors.surfaceEdge,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              foregroundColor: MusixColors.accent,
+                            ),
+                            child: const Text('LOG OUT'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+
+              if (stacked) {
+                return Column(
+                  children: <Widget>[
+                    leftColumn,
+                    const SizedBox(height: 20),
+                    rightColumn,
+                  ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(child: leftColumn),
+                  const SizedBox(width: 20),
+                  Expanded(child: rightColumn),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}

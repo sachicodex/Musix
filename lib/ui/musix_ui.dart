@@ -1,0 +1,41 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
+
+import '../core/app_controller.dart';
+import '../core/app_logger.dart';
+import '../core/colors.dart';
+import '../core/models.dart';
+import '../core/theme.dart';
+import '../screens/auth/login_screen.dart';
+import '../services/auth_service.dart';
+
+part 'shell/app_shell.dart';
+part 'features/navigation/bottom_navigation.dart';
+part 'features/home/home_screen.dart';
+part 'features/search/search_screen.dart';
+part 'features/library/library_screen.dart';
+part 'features/profile/profile_screen.dart';
+part 'features/player/player_screen.dart';
+part 'features/desktop/desktop_platform.dart';
+part 'features/desktop/shell/desktop_shell_scaffold.dart';
+part 'features/desktop/shell/desktop_window_chrome.dart';
+part 'features/desktop/shell/desktop_sidebar.dart';
+part 'features/desktop/widgets/desktop_layout.dart';
+part 'features/desktop/widgets/desktop_now_playing_rail.dart';
+part 'features/desktop/widgets/desktop_playlist_widgets.dart';
+part 'features/desktop/screens/desktop_home_screen.dart';
+part 'features/desktop/screens/desktop_search_screen.dart';
+part 'features/desktop/screens/desktop_library_screen.dart';
+part 'features/desktop/screens/desktop_profile_screen.dart';
+part 'shared/dialogs_and_utils.dart';

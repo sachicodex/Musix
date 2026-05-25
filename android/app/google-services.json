@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "356456247138",
+    "project_id": "musix-6fc50",
+    "storage_bucket": "musix-6fc50.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:356456247138:android:2057160bdabc389a5cc63b",
+        "android_client_info": {
+          "package_name": "com.sachicodex.musix"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAM1MxbGhtmMjNPsCdqupKtGdJEnuDVq90"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
