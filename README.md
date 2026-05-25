@@ -13,22 +13,21 @@
   <img src="https://img.shields.io/badge/Dart-3.10+-0175C2?logo=dart" alt="Dart Badge" />
   <img src="https://img.shields.io/badge/Platform-Android%20%7C%20Windows%20%7C%20Desktop-2ea44f" alt="Platform Badge" />
   <img src="https://img.shields.io/badge/Auth-Firebase-FFCA28?logo=firebase" alt="Firebase Badge" />
-  <img src="https://img.shields.io/badge/Streaming-YouTube%20Music-FF0000?logo=youtube" alt="YouTube Music Badge" />
 </p>
 
 ## Download
 
 | Platform | Package | Link | Notes |
 |---|---|---|---|
-| Android | APK | [Latest Release](https://github.com/sachicodex/MUSIX/releases/latest) | Install from release assets on your device. |
-| Windows | MSIX | [Latest Release](https://github.com/sachicodex/MUSIX/releases/latest) | Recommended install; includes custom window chrome and system media controls. |
+| Android | APK | [Latest Release](https://github.com/sachicodex/Musix/releases/latest) | Install from release assets on your device. |
+| Windows | MSIX | [Latest Release](https://github.com/sachicodex/Musix/releases/latest) | Recommended install; includes custom window chrome and system media controls. |
 | Linux / macOS / iOS | Build from source | [Run From Source](#run-from-source) | Use Flutter build commands for your target platform. |
 
 ## About
 
 Musix helps you listen your way:
 - Sign in with email/password and sync likes, dislikes, and taste profile to the cloud.
-- Stream from YouTube Music with smart bitrate selection and playback caching.
+- Stream Music with smart bitrate selection and playback caching.
 - Scan and play local audio (MP3, FLAC, WAV, and more).
 - Get personalized home sections, search, playlists, and a full queue.
 - Control playback from the mini player, full player, Android notifications, or Windows media keys.
@@ -46,7 +45,7 @@ Musix helps you listen your way:
 
 | Icon | Feature | What you get |
 |---|---|---|
-| &#127925; | Stream & discover | Search, trending, and online playback via YouTube / YouTube Music APIs. |
+| &#127925; | Stream & discover | Search, trending, and online playback |
 | &#128193; | Local library | Scan folders and play common audio formats from device storage. |
 | &#128100; | Account + cloud sync | Firebase Auth with Firestore-backed likes, dislikes, and preference profile. |
 | &#127911; | Personalized home | Sections like May You Like, Top Artists, Jump Back In, and context-based rails. |
@@ -106,8 +105,8 @@ Musix helps you listen your way:
 ### Setup
 
 ```bash
-git clone https://github.com/sachicodex/MUSIX.git
-cd MUSIX
+git clone https://github.com/sachicodex/Musix.git
+cd Musix
 flutter pub get
 flutter run
 ```
@@ -144,7 +143,7 @@ In [Firebase Console](https://console.firebase.google.com/):
 ### 2. Register app platforms
 
 Add apps for each platform you target:
-- **Android** — package name: `com.sachicodex.musix`
+- **Android** — package name: `com.sachicodex.Musix`
 - **Windows** — as needed for desktop Firebase options
 - **Web / iOS / macOS** — if you plan to ship those targets
 
@@ -241,11 +240,11 @@ assets/
 | Field | Value |
 |---|---|
 | Display name | Musix |
-| Publisher | Sachi Codex |
-| Package ID | `com.sachicodex.musix` |
-| Version | 1.0.0+1 |
+| Publisher | Sachicodex |
+| Package ID | `com.sachicodex.Musix` |
+| Version | 4.3.17 |
 
 ## Support
 
-- Issues: [GitHub Issues](https://github.com/sachicodex/MUSIX/issues)
-- Repository: [github.com/sachicodex/MUSIX](https://github.com/sachicodex/MUSIX)
+- Issues: [GitHub Issues](https://github.com/sachicodex/Musix/issues)
+- Repository: [github.com/sachicodex/Musix](https://github.com/sachicodex/Musix)
