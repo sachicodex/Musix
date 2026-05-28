@@ -204,7 +204,11 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
                         style: musixDialogPrimaryButtonStyle(),
                         child: Text(
                           widget.actionLabel,
-                          style: _musixBodyTextStyle(fontSize: 16),
+                          style: _musixBodyTextStyle(
+                            fontSize: 16,
+                            color: MusixColors.shellBackground,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
@@ -224,92 +228,91 @@ Future<void> _showAddToPlaylistDialog(
   MusixController controller,
   LibrarySong song,
 ) async {
-  final _AddToPlaylistSelection? selection = await showDialog<
-    _AddToPlaylistSelection
-  >(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: Text('Add "${song.title}"'),
-        content: SizedBox(
-          width: 380,
-          child: AnimatedBuilder(
-            animation: controller,
-            builder: (BuildContext context, _) {
-              final List<UserPlaylist> playlists = controller.playlists;
-              return ListView(
-                shrinkWrap: true,
-                children: <Widget>[
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(
-                      Icons.add_circle_outline_rounded,
-                      color: _kAccent,
-                    ),
-                    title: Text(
-                      'Create new playlist',
-                      style: _musixBodyTextStyle(
-                        color: _kTextPrimary,
-                        fontWeight: FontWeight.w600,
+  final _AddToPlaylistSelection? selection =
+      await showDialog<_AddToPlaylistSelection>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Add "${song.title}"'),
+            content: SizedBox(
+              width: 380,
+              child: AnimatedBuilder(
+                animation: controller,
+                builder: (BuildContext context, _) {
+                  final List<UserPlaylist> playlists = controller.playlists;
+                  return ListView(
+                    shrinkWrap: true,
+                    children: <Widget>[
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(
+                          Icons.add_circle_outline_rounded,
+                          color: _kAccent,
+                        ),
+                        title: Text(
+                          'Create new playlist',
+                          style: _musixBodyTextStyle(
+                            color: _kTextPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Create and save this song right away',
+                          style: _musixBodyTextStyle(color: _kTextSecondary),
+                        ),
+                        onTap: () async {
+                          final String? name = await _showPlaylistNameDialog(
+                            context: context,
+                            title: 'Create playlist',
+                            actionLabel: 'Create',
+                            hintText: 'New playlist',
+                          );
+                          if (name == null || !context.mounted) {
+                            return;
+                          }
+                          Navigator.of(
+                            context,
+                          ).pop(_AddToPlaylistSelection.createNew(name));
+                        },
                       ),
-                    ),
-                    subtitle: Text(
-                      'Create and save this song right away',
-                      style: _musixBodyTextStyle(color: _kTextSecondary),
-                    ),
-                    onTap: () async {
-                      final String? name = await _showPlaylistNameDialog(
-                        context: context,
-                        title: 'Create playlist',
-                        actionLabel: 'Create',
-                        hintText: 'New playlist',
-                      );
-                      if (name == null || !context.mounted) {
-                        return;
-                      }
-                      Navigator.of(context).pop(
-                        _AddToPlaylistSelection.createNew(name),
-                      );
-                    },
-                  ),
-                  if (playlists.isNotEmpty) const Divider(height: 24),
-                  if (playlists.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6, bottom: 4),
-                      child: Text(
-                        'No playlists yet. Create one to save this song.',
-                        style: _musixBodyTextStyle(color: _kTextSecondary),
-                      ),
-                    ),
-                  ...playlists.map(
-                    (UserPlaylist playlist) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        playlist.name,
-                        style: _musixBodyTextStyle(
-                          color: _kTextPrimary,
-                          fontWeight: FontWeight.w600,
+                      if (playlists.isNotEmpty) const Divider(height: 24),
+                      if (playlists.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6, bottom: 4),
+                          child: Text(
+                            'No playlists yet. Create one to save this song.',
+                            style: _musixBodyTextStyle(color: _kTextSecondary),
+                          ),
+                        ),
+                      ...playlists.map(
+                        (UserPlaylist playlist) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            playlist.name,
+                            style: _musixBodyTextStyle(
+                              color: _kTextPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${playlist.displaySongCount} songs',
+                            style: _musixBodyTextStyle(color: _kTextSecondary),
+                          ),
+                          onTap: () {
+                            Navigator.of(
+                              context,
+                            ).pop(_AddToPlaylistSelection.existing(playlist));
+                          },
                         ),
                       ),
-                      subtitle: Text(
-                        '${playlist.displaySongCount} tracks',
-                        style: _musixBodyTextStyle(color: _kTextSecondary),
-                      ),
-                      onTap: () {
-                        Navigator.of(
-                          context,
-                        ).pop(_AddToPlaylistSelection.existing(playlist));
-                      },
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          );
+        },
       );
-    },
-  );
 
   if (!context.mounted || selection == null) {
     return;
@@ -355,10 +358,7 @@ Future<UserPlaylist?> _promptForPlaylistCreationFromName(
 }
 
 class _AddToPlaylistSelection {
-  const _AddToPlaylistSelection._({
-    this.playlist,
-    this.createPlaylistName,
-  });
+  const _AddToPlaylistSelection._({this.playlist, this.createPlaylistName});
 
   const _AddToPlaylistSelection.existing(UserPlaylist playlist)
     : this._(playlist: playlist);
@@ -403,7 +403,7 @@ String _initials(String text) {
 
 String _formatClock(Duration duration) {
   if (duration.inMilliseconds <= 0) {
-    return '--:--';
+    return '0:00';
   }
   final int minutes = duration.inMinutes.remainder(60);
   final int seconds = duration.inSeconds.remainder(60);

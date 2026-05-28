@@ -313,28 +313,14 @@ class _PlayerScreenState extends State<_PlayerScreen>
                                   ),
                                 ),
                               ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  _PlayerHeaderActionButton(
-                                    icon: Icons.playlist_add_rounded,
-                                    semanticLabel: 'Save song',
-                                    tooltip: 'Save to playlist',
-                                    color: accent,
-                                    onPressed: () =>
-                                        _handleSaveAction(song),
-                                  ),
-                                  if (song.isRemote) ...<Widget>[
-                                    SizedBox(width: scale(6, min: 4, max: 8)),
-                                    _PlayerDownloadActionButton(
-                                      song: song,
-                                      controller: controller,
-                                      color: accent,
-                                      onPressed: () =>
-                                          _handleDownloadAction(song),
-                                    ),
-                                  ],
-                                ],
+                              _PlayerHeaderOverflowMenu(
+                                song: song,
+                                controller: controller,
+                                color: accent,
+                                onSaveSong: () => _handleSaveAction(song),
+                                onDownloadSong: () =>
+                                    _handleDownloadAction(song),
+                                transparentTriggerStyle: true,
                               ),
                             ],
                           ),
@@ -573,56 +559,76 @@ class _PlayerHeaderActionButton extends StatelessWidget {
   const _PlayerHeaderActionButton({
     required this.icon,
     required this.semanticLabel,
-    required this.tooltip,
     required this.color,
     required this.onPressed,
     this.child,
+    this.transparentStyle = false,
   });
 
   final IconData icon;
   final String semanticLabel;
-  final String tooltip;
   final Color color;
   final VoidCallback? onPressed;
   final Widget? child;
+  final bool transparentStyle;
 
   @override
   Widget build(BuildContext context) {
     final bool enabled = onPressed != null;
+    final bool useAndroidStyle =
+        defaultTargetPlatform == TargetPlatform.android;
+    final bool useTransparentStyle = transparentStyle;
+    final Color backgroundColor = useTransparentStyle
+        ? Colors.transparent
+        : useAndroidStyle
+        ? color.withValues(alpha: enabled ? 0.16 : 0.08)
+        : enabled
+        ? const Color(0xFF25110B)
+        : const Color(0xFF25110B).withValues(alpha: 0.55);
+    final Color borderColor = useTransparentStyle
+        ? Colors.transparent
+        : useAndroidStyle
+        ? color.withValues(alpha: enabled ? 0.34 : 0.16)
+        : enabled
+        ? const Color(0xFF5B2D14)
+        : const Color(0xFF5B2D14).withValues(alpha: 0.55);
+
     return Semantics(
       button: true,
       enabled: enabled,
       label: semanticLabel,
-      child: Tooltip(
-        message: tooltip,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: BorderRadius.circular(14),
-            child: Ink(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: enabled
-                    ? const Color(0xFF25110B)
-                    : const Color(0xFF25110B).withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: enabled
-                      ? const Color(0xFF5B2D14)
-                      : const Color(0xFF5B2D14).withValues(alpha: 0.55),
-                ),
-              ),
-              child: Center(
-                child:
-                    child ??
-                    Icon(
-                      icon,
-                      color: enabled ? color : color.withValues(alpha: 0.7),
-                      size: 22,
-                    ),
-              ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: borderColor),
+              boxShadow: useTransparentStyle
+                  ? null
+                  : useAndroidStyle
+                  ? <BoxShadow>[
+                      BoxShadow(
+                        color: color.withValues(alpha: enabled ? 0.14 : 0.06),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Center(
+              child:
+                  child ??
+                  Icon(
+                    icon,
+                    color: enabled ? color : color.withValues(alpha: 0.7),
+                    size: 22,
+                  ),
             ),
           ),
         ),
@@ -631,18 +637,24 @@ class _PlayerHeaderActionButton extends StatelessWidget {
   }
 }
 
-class _PlayerDownloadActionButton extends StatelessWidget {
-  const _PlayerDownloadActionButton({
+enum _PlayerHeaderMenuAction { saveToPlaylist, download }
+
+class _PlayerHeaderOverflowMenu extends StatelessWidget {
+  const _PlayerHeaderOverflowMenu({
     required this.song,
     required this.controller,
     required this.color,
-    required this.onPressed,
+    required this.onSaveSong,
+    required this.onDownloadSong,
+    this.transparentTriggerStyle = false,
   });
 
   final LibrarySong song;
   final MusixController controller;
   final Color color;
-  final Future<void> Function() onPressed;
+  final Future<void> Function() onSaveSong;
+  final Future<void> Function() onDownloadSong;
+  final bool transparentTriggerStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -651,37 +663,121 @@ class _PlayerDownloadActionButton extends StatelessWidget {
       builder: (BuildContext context, _) {
         final bool isDownloaded = controller.isSongDownloaded(song);
         final bool isDownloading = controller.isSongDownloading(song.id);
-        return _PlayerHeaderActionButton(
-          icon: isDownloaded
-              ? Icons.download_done_rounded
-              : Icons.download_rounded,
-          semanticLabel: isDownloaded
-              ? 'Song downloaded'
-              : isDownloading
-              ? 'Song downloading'
-              : 'Download song',
-          tooltip: isDownloaded
-              ? 'Downloaded'
-              : isDownloading
-              ? 'Downloading'
-              : 'Download',
-          color: color,
-          onPressed: isDownloaded || isDownloading
-              ? null
-              : () => unawaited(onPressed()),
-          child: isDownloading
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: _MusixLoader(
+        return PopupMenuButton<_PlayerHeaderMenuAction>(
+          tooltip: '',
+          color: const Color(0xFF25110B),
+          surfaceTintColor: Colors.transparent,
+          shadowColor: Colors.black.withValues(alpha: 0.32),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: color.withValues(alpha: 0.24)),
+          ),
+          position: PopupMenuPosition.under,
+          offset: const Offset(0, 8),
+          popUpAnimationStyle: AnimationStyle.noAnimation,
+          onSelected: (_PlayerHeaderMenuAction action) {
+            switch (action) {
+              case _PlayerHeaderMenuAction.saveToPlaylist:
+                unawaited(onSaveSong());
+              case _PlayerHeaderMenuAction.download:
+                unawaited(onDownloadSong());
+            }
+          },
+          itemBuilder: (BuildContext context) =>
+              <PopupMenuEntry<_PlayerHeaderMenuAction>>[
+                PopupMenuItem<_PlayerHeaderMenuAction>(
+                  value: _PlayerHeaderMenuAction.saveToPlaylist,
+                  child: _PlayerHeaderMenuItem(
+                    icon: Icons.playlist_add_rounded,
+                    label: 'Save to playlist',
                     color: color,
-                    size: 20,
-                    strokeWidth: 2.2,
                   ),
-                )
-              : null,
+                ),
+                if (song.isRemote)
+                  PopupMenuItem<_PlayerHeaderMenuAction>(
+                    value: _PlayerHeaderMenuAction.download,
+                    enabled: !isDownloaded && !isDownloading,
+                    child: _PlayerHeaderMenuItem(
+                      icon: isDownloaded
+                          ? Icons.download_done_rounded
+                          : Icons.downloading_outlined,
+                      label: isDownloaded
+                          ? 'Downloaded'
+                          : isDownloading
+                          ? 'Downloading'
+                          : 'Download',
+                      color: color,
+                      trailing: isDownloading
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: _MusixLoader(
+                                color: color,
+                                size: 18,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+              ],
+          child: IgnorePointer(
+            child: _PlayerHeaderActionButton(
+              icon: Icons.more_horiz_rounded,
+              semanticLabel: isDownloading
+                  ? 'Downloading song'
+                  : 'More actions',
+              color: color,
+              onPressed: () {},
+              transparentStyle: transparentTriggerStyle,
+              child: isDownloading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: _MusixLoader(
+                        color: color,
+                        size: 20,
+                        strokeWidth: 2.2,
+                      ),
+                    )
+                  : Icon(Icons.more_horiz_rounded, color: color, size: 22),
+            ),
+          ),
         );
       },
+    );
+  }
+}
+
+class _PlayerHeaderMenuItem extends StatelessWidget {
+  const _PlayerHeaderMenuItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle baseStyle =
+        Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: const Color(0xFFFFDFC9),
+          fontWeight: FontWeight.w600,
+        ) ??
+        const TextStyle(color: Color(0xFFFFDFC9), fontWeight: FontWeight.w600);
+
+    return Row(
+      children: <Widget>[
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 10),
+        Expanded(child: Text(label, style: baseStyle)),
+        if (trailing != null) ...<Widget>[const SizedBox(width: 12), trailing!],
+      ],
     );
   }
 }
@@ -893,26 +989,12 @@ class _DesktopPlayerArtworkPanel extends StatelessWidget {
                   ),
                 ),
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  _PlayerHeaderActionButton(
-                    icon: Icons.playlist_add_rounded,
-                    semanticLabel: 'Save song',
-                    tooltip: 'Save to playlist',
-                    color: accent,
-                    onPressed: () => unawaited(onSaveSong(song)),
-                  ),
-                  if (song.isRemote) ...<Widget>[
-                    const SizedBox(width: 8),
-                    _PlayerDownloadActionButton(
-                      song: song,
-                      controller: controller,
-                      color: accent,
-                      onPressed: () => onDownloadSong(song),
-                    ),
-                  ],
-                ],
+              _PlayerHeaderOverflowMenu(
+                song: song,
+                controller: controller,
+                color: accent,
+                onSaveSong: () => onSaveSong(song),
+                onDownloadSong: () => onDownloadSong(song),
               ),
             ],
           ),
@@ -1966,261 +2048,278 @@ class _PlayerQueueSheetState extends State<_PlayerQueueSheet> {
         final bool loading = controller.smartQueueLoading || loadingMore;
 
         return Container(
-      height: MediaQuery.sizeOf(context).height * 0.62,
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
-      decoration: const BoxDecoration(
-        color: sheet,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Center(
-            child: IconButton(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.keyboard_arrow_down_rounded),
-              color: textPrimary.withValues(alpha: 0.92),
-              iconSize: 34,
-            ),
+          height: MediaQuery.sizeOf(context).height * 0.62,
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+          decoration: const BoxDecoration(
+            color: sheet,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
-          if (loading) ...<Widget>[
-            const SizedBox(height: 6),
-            Row(
-              children: <Widget>[
-                const RepaintBoundary(
-                  child: _MusixLoader(
-                    color: accent,
-                    size: 18,
-                    strokeWidth: 2.2,
-                  ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Center(
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                  color: textPrimary.withValues(alpha: 0.92),
+                  iconSize: 34,
                 ),
-                const SizedBox(width: 10),
-                Text(
-                  'Loading related songs...',
-                  style: _musixBodyTextStyle(
-                    color: textPrimary.withValues(alpha: 0.88),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+              ),
+              if (loading) ...<Widget>[
+                const SizedBox(height: 6),
+                Row(
+                  children: <Widget>[
+                    const RepaintBoundary(
+                      child: _MusixLoader(
+                        color: accent,
+                        size: 18,
+                        strokeWidth: 2.2,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Loading related songs...',
+                      style: _musixBodyTextStyle(
+                        color: textPrimary.withValues(alpha: 0.88),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
-          const SizedBox(height: 16),
-          Expanded(
-            child: Column(
-              children: <Widget>[
-                Expanded(
-                  child: songs.isEmpty
-                      ? Center(
-                          child: Text(
-                            'Queue is empty. Start playback to generate smart suggestions.',
-                            textAlign: TextAlign.center,
-                            style: _musixBodyTextStyle(
-                              color: textSecondary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        )
-                      : ReorderableListView.builder(
-                          scrollController: _scroll,
-                          buildDefaultDragHandles: false,
-                          proxyDecorator:
-                              (
-                                Widget child,
-                                int index,
-                                Animation<double> animation,
-                              ) {
-                                return AnimatedBuilder(
-                                  animation: animation,
-                                  builder: (BuildContext context, Widget? _) {
-                                    final double t = Curves.easeOutCubic
-                                        .transform(animation.value);
-                                    return Transform.scale(
-                                      scale: 1 + (t * 0.02),
-                                      child: Material(
-                                        color: Colors.transparent,
-                                        elevation: 12 * t,
-                                        borderRadius: BorderRadius.circular(22),
-                                        child: child,
-                                      ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: Column(
+                  children: <Widget>[
+                    Expanded(
+                      child: songs.isEmpty
+                          ? Center(
+                              child: Text(
+                                'Queue is empty. Start playback to generate smart suggestions.',
+                                textAlign: TextAlign.center,
+                                style: _musixBodyTextStyle(
+                                  color: textSecondary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            )
+                          : ReorderableListView.builder(
+                              scrollController: _scroll,
+                              buildDefaultDragHandles: false,
+                              proxyDecorator:
+                                  (
+                                    Widget child,
+                                    int index,
+                                    Animation<double> animation,
+                                  ) {
+                                    return AnimatedBuilder(
+                                      animation: animation,
+                                      builder:
+                                          (BuildContext context, Widget? _) {
+                                            final double t = Curves.easeOutCubic
+                                                .transform(animation.value);
+                                            return Transform.scale(
+                                              scale: 1 + (t * 0.02),
+                                              child: Material(
+                                                color: Colors.transparent,
+                                                elevation: 12 * t,
+                                                borderRadius:
+                                                    BorderRadius.circular(22),
+                                                child: child,
+                                              ),
+                                            );
+                                          },
                                     );
                                   },
+                              onReorderStart: (int index) {
+                                HapticFeedback.selectionClick();
+                              },
+                              onReorderEnd: (int index) {
+                                HapticFeedback.selectionClick();
+                              },
+                              onReorder: (int oldIndex, int newIndex) async {
+                                if (hasHiddenQueueSongs) {
+                                  return;
+                                }
+                                if (newIndex > oldIndex) {
+                                  newIndex -= 1;
+                                }
+                                await HapticFeedback.selectionClick();
+                                await controller.reorderQueue(
+                                  oldIndex,
+                                  newIndex,
                                 );
                               },
-                          onReorderStart: (int index) {
-                            HapticFeedback.selectionClick();
-                          },
-                          onReorderEnd: (int index) {
-                            HapticFeedback.selectionClick();
-                          },
-                          onReorder: (int oldIndex, int newIndex) async {
-                            if (hasHiddenQueueSongs) {
-                              return;
-                            }
-                            if (newIndex > oldIndex) {
-                              newIndex -= 1;
-                            }
-                            await HapticFeedback.selectionClick();
-                            await controller.reorderQueue(oldIndex, newIndex);
-                          },
-                          itemCount: songs.length,
-                          itemBuilder: (BuildContext context, int index) {
-                            final _VisibleQueueSong queueItem = songs[index];
-                            final LibrarySong song = queueItem.song;
-                            final bool active =
-                                controller.visibleQueueIndex ==
-                                queueItem.queueIndex;
+                              itemCount: songs.length,
+                              itemBuilder: (BuildContext context, int index) {
+                                final _VisibleQueueSong queueItem =
+                                    songs[index];
+                                final LibrarySong song = queueItem.song;
+                                final bool active =
+                                    controller.visibleQueueIndex ==
+                                    queueItem.queueIndex;
 
-                            return Padding(
-                              key: ValueKey<String>('queue-${song.id}-$index'),
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: Dismissible(
-                                key: ValueKey<String>(
-                                  'queue-dismiss-${queueItem.queueIndex}-${song.id}',
-                                ),
-                                direction: DismissDirection.endToStart,
-                                background: const _SwipeActionBackground(
-                                  alignment: Alignment.centerRight,
-                                  color: Color(0xFF5A1613),
-                                  icon: Icons.delete_outline_rounded,
-                                  label: 'Remove',
-                                ),
-                                confirmDismiss:
-                                    (DismissDirection direction) async {
-                                      await HapticFeedback.mediumImpact();
-                                      return true;
-                                    },
-                                onDismissed:
-                                    (DismissDirection direction) async {
-                                      final ScaffoldMessengerState messenger =
-                                          ScaffoldMessenger.of(context);
-                                      await _removeQueueSongWithUndo(
-                                        messenger,
-                                        controller: controller,
-                                        song: song,
-                                        queueIndex: queueItem.queueIndex,
-                                      );
-                                    },
-                                child: Material(
-                                  color: active
-                                      ? accent.withValues(alpha: 0.14)
-                                      : tile,
-                                  borderRadius: BorderRadius.circular(22),
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(22),
-                                    onTap: () async {
-                                      unawaited(
-                                        HapticFeedback.selectionClick(),
-                                      );
-                                      await controller.jumpToQueue(
-                                        queueItem.queueIndex,
-                                      );
-                                      if (context.mounted) {
-                                        Navigator.of(context).pop();
-                                      }
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        12,
-                                        10,
-                                        12,
-                                        10,
-                                      ),
-                                      child: Row(
-                                        children: <Widget>[
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              16,
-                                            ),
-                                            child: SizedBox(
-                                              width: 56,
-                                              height: 56,
-                                              child:
-                                                  song.artworkUrl != null &&
-                                                      song.artworkUrl!
-                                                          .trim()
-                                                          .isNotEmpty
-                                                  ? _CachedArtworkImage(
-                                                      imageUrl:
-                                                          song.artworkUrl!,
-                                                      dimension: 56,
-                                                      errorWidget:
-                                                          const _PlayerArtFallback(),
-                                                      placeholder:
-                                                          const _PlayerArtFallback(),
-                                                    )
-                                                  : const _PlayerArtFallback(),
-                                            ),
+                                return Padding(
+                                  key: ValueKey<String>(
+                                    'queue-${song.id}-$index',
+                                  ),
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: Dismissible(
+                                    key: ValueKey<String>(
+                                      'queue-dismiss-${queueItem.queueIndex}-${song.id}',
+                                    ),
+                                    direction: DismissDirection.endToStart,
+                                    background: const _SwipeActionBackground(
+                                      alignment: Alignment.centerRight,
+                                      color: Color(0xFF5A1613),
+                                      icon: Icons.delete_outline_rounded,
+                                      label: 'Remove',
+                                    ),
+                                    confirmDismiss:
+                                        (DismissDirection direction) async {
+                                          await HapticFeedback.mediumImpact();
+                                          return true;
+                                        },
+                                    onDismissed:
+                                        (DismissDirection direction) async {
+                                          final ScaffoldMessengerState
+                                          messenger = ScaffoldMessenger.of(
+                                            context,
+                                          );
+                                          await _removeQueueSongWithUndo(
+                                            messenger,
+                                            controller: controller,
+                                            song: song,
+                                            queueIndex: queueItem.queueIndex,
+                                          );
+                                        },
+                                    child: Material(
+                                      color: active
+                                          ? accent.withValues(alpha: 0.14)
+                                          : tile,
+                                      borderRadius: BorderRadius.circular(22),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(22),
+                                        onTap: () async {
+                                          unawaited(
+                                            HapticFeedback.selectionClick(),
+                                          );
+                                          await controller.jumpToQueue(
+                                            queueItem.queueIndex,
+                                          );
+                                          if (context.mounted) {
+                                            Navigator.of(context).pop();
+                                          }
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            12,
+                                            10,
+                                            12,
+                                            10,
                                           ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: <Widget>[
-                                                Text(
-                                                  song.title,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: _musixBodyTextStyle(
-                                                    color: _kTextPrimary
-                                                        .withValues(alpha: 0.9),
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  _songArtistLabel(song),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: _musixBodyTextStyle(
-                                                    color: active
-                                                        ? accent
-                                                        : _kTextSecondary
-                                                              .withValues(
-                                                                alpha: 0.75,
-                                                              ),
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          if (!hasHiddenQueueSongs)
-                                            ReorderableDelayedDragStartListener(
-                                              index: index,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(
-                                                  left: 10,
-                                                ),
-                                                child: Icon(
-                                                  Icons.drag_handle_rounded,
-                                                  color: textSecondary
-                                                      .withValues(alpha: 0.84),
+                                          child: Row(
+                                            children: <Widget>[
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                child: SizedBox(
+                                                  width: 56,
+                                                  height: 56,
+                                                  child:
+                                                      song.artworkUrl != null &&
+                                                          song.artworkUrl!
+                                                              .trim()
+                                                              .isNotEmpty
+                                                      ? _CachedArtworkImage(
+                                                          imageUrl:
+                                                              song.artworkUrl!,
+                                                          dimension: 56,
+                                                          errorWidget:
+                                                              const _PlayerArtFallback(),
+                                                          placeholder:
+                                                              const _PlayerArtFallback(),
+                                                        )
+                                                      : const _PlayerArtFallback(),
                                                 ),
                                               ),
-                                            ),
-                                        ],
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: <Widget>[
+                                                    Text(
+                                                      song.title,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style:
+                                                          _musixBodyTextStyle(
+                                                            color: _kTextPrimary
+                                                                .withValues(
+                                                                  alpha: 0.9,
+                                                                ),
+                                                            fontSize: 16,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      _songArtistLabel(song),
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: _musixBodyTextStyle(
+                                                        color: active
+                                                            ? accent
+                                                            : _kTextSecondary
+                                                                  .withValues(
+                                                                    alpha: 0.75,
+                                                                  ),
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              if (!hasHiddenQueueSongs)
+                                                ReorderableDelayedDragStartListener(
+                                                  index: index,
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          left: 10,
+                                                        ),
+                                                    child: Icon(
+                                                      Icons.drag_handle_rounded,
+                                                      color: textSecondary
+                                                          .withValues(
+                                                            alpha: 0.84,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
         );
       },
     );
@@ -2252,43 +2351,47 @@ class _MusixCollectionSummary extends StatelessWidget {
         border: Border.all(color: _kSurfaceEdge),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
           leading,
-          const SizedBox(width: 16),
+          const SizedBox(width: 26),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: _musixBodyTextStyle(
-                    color: _kTextPrimary,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w600,
-                    height: 0.96,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: _musixBodyTextStyle(
+                      color: _kTextPrimary,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w600,
+                      height: 0.96,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                ...visibleLines.map(
-                  (String line) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      line,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: _musixBodyTextStyle(
-                        color: _kTextSecondary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        height: 1.3,
+                  const SizedBox(height: 10),
+                  ...visibleLines.map(
+                    (String line) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        line,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: _musixBodyTextStyle(
+                          color: _kTextSecondary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          height: 1.3,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -2426,16 +2529,14 @@ class _MusixArtistScreenState extends State<_MusixArtistScreen> {
       return const <Widget>[
         _PersonalizationHintCard(
           message:
-              'This artist could not be loaded from YouTube Music right now. Please try again later.',
+              'This artist could not be loaded right now. Please try again later.',
         ),
       ];
     }
 
     if (_resolvedArtist == null || _songs.isEmpty) {
       return const <Widget>[
-        _PersonalizationHintCard(
-          message: 'No songs found for this artist on YouTube Music.',
-        ),
+        _PersonalizationHintCard(message: 'No songs found for this artist.'),
       ];
     }
 
@@ -2478,11 +2579,12 @@ class _MusixArtistScreenState extends State<_MusixArtistScreen> {
       title: artist.name,
       scrollController: _scrollController,
       actions: <Widget>[
-        IconButton(
+        _MusixHeaderActionButton(
+          icon: Icons.play_arrow_rounded,
+          primary: true,
           onPressed: _resolvedArtist == null || _songs.isEmpty
               ? null
               : () => widget.controller.playArtist(_resolvedArtist!),
-          icon: const Icon(Icons.play_arrow_rounded, color: _kAccent),
         ),
       ],
       child: Column(
@@ -2497,15 +2599,15 @@ class _MusixArtistScreenState extends State<_MusixArtistScreen> {
             title: artist.name,
             lines: <String>[
               if (_initialLoading)
-                'Loading songs from YouTube Music...'
+                'Loading songs...'
               else if (_loadError != null)
-                'Could not load this artist from YouTube Music.'
+                'Could not load this artist right now.'
               else if (_resolvedArtist == null || _songs.isEmpty)
-                'No songs found for this artist on YouTube Music.'
+                'No songs found for this artist.'
               else if (_hasMoreSongs)
-                '${_songs.length} songs loaded from YouTube Music'
+                '${_songs.length} songs loaded'
               else
-                '${_songs.length} tracks from YouTube Music',
+                '${_songs.length} songs loaded',
             ],
           ),
           const SizedBox(height: 20),
@@ -2596,7 +2698,8 @@ class _MusixPlaylistScreenState extends State<_MusixPlaylistScreen> {
     if (widget.localPlaybackOnly && _isDownloadsCollectionTitle(widget.title)) {
       return widget.controller.downloadedSongs;
     }
-    if (widget.localPlaybackOnly && _isLocalFilesCollectionTitle(widget.title)) {
+    if (widget.localPlaybackOnly &&
+        _isLocalFilesCollectionTitle(widget.title)) {
       return widget.controller.browsableSongs;
     }
     return widget.songs;
@@ -2684,42 +2787,33 @@ class _MusixPlaylistScreenState extends State<_MusixPlaylistScreen> {
           actions: <Widget>[
             if (widget.showLocalImportActions &&
                 widget.controller.supportsLocalFileImport)
-              IconButton(
-                tooltip: 'Import folder',
+              _MusixHeaderActionButton(
+                icon: Icons.folder_open_rounded,
                 onPressed: widget.controller.scanning
                     ? null
                     : () => widget.controller.importFolder(),
-                icon: const Icon(
-                  Icons.folder_open_rounded,
-                  color: _kTextSecondary,
-                ),
               ),
             if (widget.showLocalImportActions &&
                 widget.controller.supportsLocalFileImport)
-              IconButton(
-                tooltip: 'Add files',
+              _MusixHeaderActionButton(
+                icon: Icons.audio_file_outlined,
                 onPressed: widget.controller.scanning
                     ? null
                     : () => widget.controller.importFiles(),
-                icon: const Icon(
-                  Icons.audio_file_outlined,
-                  color: _kTextSecondary,
-                ),
               ),
             if (playlist != null)
-              IconButton(
+              _MusixHeaderActionButton(
+                icon: Icons.edit_outlined,
                 onPressed: () => _showRenamePlaylistDialog(
                   context,
                   widget.controller,
                   playlist,
                 ),
-                icon: const Icon(
-                  Icons.edit_outlined,
-                  color: _kTextSecondary,
-                ),
               ),
             if (playlist != null)
-              IconButton(
+              _MusixHeaderActionButton(
+                icon: Icons.delete_outline_rounded,
+                destructive: true,
                 onPressed: () async {
                   final int playlistIndex = widget.controller.playlists
                       .indexWhere(
@@ -2748,10 +2842,6 @@ class _MusixPlaylistScreenState extends State<_MusixPlaylistScreen> {
                   }
                   await widget.controller.finalizeDeletedPlaylist(removed.id);
                 },
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: _kTextSecondary,
-                ),
               ),
           ],
           child: Column(
@@ -2772,8 +2862,7 @@ class _MusixPlaylistScreenState extends State<_MusixPlaylistScreen> {
                       ),
                 title: title,
                 lines: <String>[
-                  '$expectedSongCount tracks',
-                  if (playlist != null) 'Saved playlist',
+                  '$expectedSongCount songs',
                   if (pendingCloudSongs > 0)
                     'Loading $pendingCloudSongs more from cloud',
                   if (unavailableCloudSongs > 0)
@@ -2793,9 +2882,7 @@ class _MusixPlaylistScreenState extends State<_MusixPlaylistScreen> {
               if (loadingPlaylistMetadata || loadingHydratedSongs)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 36),
-                  child: Center(
-                    child: _MusixLoader(color: _kAccent, size: 24),
-                  ),
+                  child: Center(child: _MusixLoader(color: _kAccent, size: 24)),
                 )
               else
                 ...songs.asMap().entries.map(
@@ -2945,6 +3032,8 @@ class _LibraryFeatureCard extends StatelessWidget {
     required this.watermark,
     required this.onTap,
     this.darkText = true,
+    this.iconBackgroundColor,
+    this.iconColor,
   });
 
   final String title;
@@ -2955,89 +3044,134 @@ class _LibraryFeatureCard extends StatelessWidget {
   final IconData watermark;
   final VoidCallback onTap;
   final bool darkText;
+  final Color? iconBackgroundColor;
+  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
     return _ApplePressable(
       onTap: onTap,
       borderRadius: BorderRadius.circular(24),
-      child: Container(
-        height: 164,
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          gradient: LinearGradient(
-            colors: <Color>[accent, secondary],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Stack(
-          children: <Widget>[
-            Positioned(
-              top: 0,
-              left: 0,
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: darkText
-                      ? Colors.black.withValues(alpha: 0.3)
-                      : Colors.black.withValues(alpha: 0.18),
-                ),
-                child: Icon(
-                  icon,
-                  color: darkText ? Colors.white : const Color(0xFFFFC99F),
-                  size: 24,
-                ),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final bool compactLayout = constraints.maxWidth < 260;
+
+          return Container(
+            height: 164,
+            padding: EdgeInsets.fromLTRB(
+              compactLayout ? 16 : 18,
+              16,
+              compactLayout ? 16 : 18,
+              18,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: LinearGradient(
+                colors: <Color>[accent, secondary],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
-            Positioned(
-              right: -12,
-              top: -8,
-              child: Icon(
-                watermark,
-                size: 114,
-                color: darkText
-                    ? Colors.white.withValues(alpha: 0.16)
-                    : Colors.white.withValues(alpha: 0.06),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    title,
-                    style: _musixBodyTextStyle(
-                      color: darkText
-                          ? Colors.black.withValues(alpha: 0.94)
-                          : const Color(0xFFF6E3D2),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      height: 0.98,
+            child: Stack(
+              children: <Widget>[
+                if (compactLayout)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: Icon(
+                      icon,
+                      color:
+                          iconColor ??
+                          (darkText ? Colors.white : const Color(0xFFFFC99F)),
+                      size: 24,
+                    ),
+                  )
+                else
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color:
+                            iconBackgroundColor ??
+                            (darkText
+                                ? Colors.black.withValues(alpha: 0.3)
+                                : Colors.black.withValues(alpha: 0.18)),
+                      ),
+                      child: Icon(
+                        icon,
+                        color:
+                            iconColor ??
+                            (darkText ? Colors.white : const Color(0xFFFFC99F)),
+                        size: 24,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    subtitle,
-                    style: _musixBodyTextStyle(
+                Align(
+                  alignment: compactLayout
+                      ? Alignment.topCenter
+                      : Alignment.topRight,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top: compactLayout ? 4 : 0,
+                      right: compactLayout ? 0 : 0,
+                    ),
+                    child: Icon(
+                      watermark,
+                      size: compactLayout ? 92 : 114,
                       color: darkText
-                          ? Colors.black.withValues(alpha: 0.76)
-                          : const Color(0xFFD6B099),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                          ? Colors.white.withValues(alpha: 0.16)
+                          : Colors.white.withValues(alpha: 0.06),
                     ),
                   ),
-                ],
-              ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Column(
+                    crossAxisAlignment: compactLayout
+                        ? CrossAxisAlignment.center
+                        : CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        title,
+                        textAlign: compactLayout
+                            ? TextAlign.center
+                            : TextAlign.left,
+                        style: _musixBodyTextStyle(
+                          color: darkText
+                              ? Colors.black.withValues(alpha: 0.94)
+                              : const Color(0xFFF6E3D2),
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          height: 0.98,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle,
+                        textAlign: compactLayout
+                            ? TextAlign.center
+                            : TextAlign.left,
+                        style: _musixBodyTextStyle(
+                          color: darkText
+                              ? Colors.black.withValues(alpha: 0.76)
+                              : const Color(0xFFD6B099),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -3220,6 +3354,7 @@ class _LibraryPlaylistRow extends StatelessWidget {
           border: Border.all(color: _kSongCardBorder),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -3254,32 +3389,36 @@ class _LibraryPlaylistRow extends StatelessWidget {
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _musixBodyTextStyle(
-                      color: _kSongCardTitle,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w600,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _musixBodyTextStyle(
+                        color: _kSongCardTitle,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle ??
-                        'Playlist - ${playlist?.displaySongCount ?? songs.length} Tracks',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _musixBodyTextStyle(
-                      color: _kSongCardSubtitle,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle ??
+                          'Playlist - ${playlist?.displaySongCount ?? songs.length} Songs',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _musixBodyTextStyle(
+                        color: _kSongCardSubtitle,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 8),

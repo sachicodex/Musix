@@ -33,7 +33,7 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^1.0.9
   cached_network_image: ^3.4.1
   provider: ^6.1.5+1
   collection: ^1.19.1
@@ -118,7 +118,6 @@ msix_config:
   display_name: Musix
   publisher_display_name: Sachi Codex
   identity_name: com.sachicodex.musix
-  msix_version: 1.0.0.0
   logo_path: assets/icons/Musix - Windows.png
   start_menu_icon_path: assets/icons/Musix - Windows.png
   tile_icon_path: assets/icons/Musix - Windows.png

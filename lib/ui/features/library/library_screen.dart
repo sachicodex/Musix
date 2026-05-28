@@ -114,12 +114,16 @@ class _LibraryScreenState extends State<_LibraryScreen>
                           child: _LibraryFeatureCard(
                             title: 'Downloads',
                             subtitle: hasDownloads
-                                ? '${downloadedSongs.length} saved'
+                                ? '${downloadedSongs.length} songs ready'
                                 : 'Save music',
                             icon: Icons.downloading_outlined,
                             accent: const Color(0xFFFF8C43),
                             secondary: const Color(0xFFCC5A18),
                             watermark: Icons.download_for_offline_rounded,
+                            iconBackgroundColor: Colors.white.withValues(
+                              alpha: 0.15,
+                            ),
+                            iconColor: Colors.white.withValues(alpha: 0.55),
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
@@ -142,11 +146,12 @@ class _LibraryScreenState extends State<_LibraryScreen>
                             subtitle: controller.supportsLocalFileImport
                                 ? 'Import or browse'
                                 : 'Ready anytime',
-                            icon: Icons.folder,
+                            icon: CupertinoIcons.folder_solid,
                             accent: const Color(0xFF4A1D06),
                             secondary: const Color(0xFF512007),
                             watermark: Icons.folder,
                             darkText: false,
+                            iconColor: Colors.white.withValues(alpha: 0.7),
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(

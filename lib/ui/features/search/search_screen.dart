@@ -450,7 +450,8 @@ class _SearchScreenState extends State<_SearchScreen>
   List<LibrarySong> _monthlyTrendingFor(MusixController controller) {
     final String signature =
         '${controller.search.revision}|${controller.preferredRegionLabel}';
-    if (_trendingCacheSignature == signature && _cachedMonthlyTrending != null) {
+    if (_trendingCacheSignature == signature &&
+        _cachedMonthlyTrending != null) {
       return _cachedMonthlyTrending!;
     }
     _trendingCacheSignature = signature;
@@ -691,15 +692,13 @@ class _SearchScreenState extends State<_SearchScreen>
                             (BuildContext context, BoxConstraints constraints) {
                               final double width = constraints.maxWidth;
                               final double smallWidth = ((width - 14) / 2)
-                                  .clamp(
-                                    120.0,
-                                    260.0,
-                                  );
+                                  .clamp(120.0, 260.0);
                               final _SearchGenreShelf large =
                                   browseShelves.last;
-                              final List<_SearchGenreShelf> small = browseShelves
-                                  .take(browseShelves.length - 1)
-                                  .toList(growable: false);
+                              final List<_SearchGenreShelf> small =
+                                  browseShelves
+                                      .take(browseShelves.length - 1)
+                                      .toList(growable: false);
                               return Wrap(
                                 spacing: 14,
                                 runSpacing: 16,
@@ -740,9 +739,7 @@ class _SearchScreenState extends State<_SearchScreen>
                             Text(
                               'Regional chart songs are loading for ${widget.controller.preferredRegionLabel}.',
                               style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
-                                    color: MusixColors.textMuted,
-                                  ),
+                                  ?.copyWith(color: MusixColors.textMuted),
                             )
                           else
                             ...monthlyTrendingSongs.asMap().entries.map(

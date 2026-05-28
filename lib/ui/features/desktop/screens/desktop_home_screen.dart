@@ -98,6 +98,9 @@ class _DesktopHomeScreen extends StatelessWidget {
     final bool showRecommendationLoadingState =
         !hasRevealableContent &&
         (controller.homeLoading || !controller.homeRefreshResolvedOnce);
+    final _HomeEmptyStateMessages emptyStateMessages = _homeEmptyStateMessages(
+      controller,
+    );
     final List<LibrarySong> jumpBackIn = controller.recentlyPlayedSongs
         .take(4)
         .toList(growable: false);
@@ -123,9 +126,8 @@ class _DesktopHomeScreen extends StatelessWidget {
                     imageUrl: featured.imageUrl,
                     onListenNow: featured.onListenNow,
                   )
-                : const _PersonalizationHintCard(
-                    message:
-                        'Play local songs, like tracks, or reconnect to load personalized recommendations here.',
+                : _PersonalizationHintCard(
+                    message: emptyStateMessages.heroMessage,
                   ),
           ),
           const SizedBox(height: 20),
@@ -152,9 +154,8 @@ class _DesktopHomeScreen extends StatelessWidget {
                 if (showRecommendationLoadingState)
                   const _MusixListSkeleton(count: 4)
                 else if (mayYouLike.isEmpty)
-                  const _PersonalizationHintCard(
-                    message:
-                        'Play, like, and finish songs to train your personalized May You Like section.',
+                  _PersonalizationHintCard(
+                    message: emptyStateMessages.mayYouLikeMessage,
                   )
                 else
                   _ProgressiveListReveal(

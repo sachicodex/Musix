@@ -16,6 +16,75 @@ class _HomeText {
   static const String moreFromPrefix = 'MORE FROM';
 }
 
+class _HomeEmptyStateMessages {
+  const _HomeEmptyStateMessages({
+    required this.heroMessage,
+    required this.mayYouLikeMessage,
+  });
+
+  final String heroMessage;
+  final String mayYouLikeMessage;
+}
+
+_HomeEmptyStateMessages _homeEmptyStateMessages(MusixController controller) {
+  final String error = controller.homeError?.trim() ?? '';
+  final String lowerError = error.toLowerCase();
+  final bool noInternet =
+      controller.isOffline ||
+      lowerError.contains('no internet') ||
+      lowerError.contains('internet') ||
+      lowerError.contains('reconnect');
+  final bool hasCurrentRemoteSignal = controller.currentSong?.isRemote ?? false;
+  final bool hasHistorySignal = controller.recentlyPlayedSongs.isNotEmpty;
+  final bool hasLikedSignal = controller.likedSongs.any(
+    (LibrarySong song) => !song.isDisliked,
+  );
+  final bool hasPersonalizationSignals =
+      hasCurrentRemoteSignal || hasHistorySignal || hasLikedSignal;
+
+  if (controller.offlineMusicMode) {
+    return const _HomeEmptyStateMessages(
+      heroMessage:
+          'Offline Music Mode is on, so online recommendations are paused until you switch back online.',
+      mayYouLikeMessage:
+          'May You Like is unavailable in Offline Music Mode because it needs online recommendations.',
+    );
+  }
+
+  if (noInternet) {
+    return const _HomeEmptyStateMessages(
+      heroMessage:
+          'No internet connection. Reconnect and refresh to load personalized recommendations here.',
+      mayYouLikeMessage:
+          'May You Like needs internet to load recommendations. Reconnect and refresh to try again.',
+    );
+  }
+
+  if (!hasPersonalizationSignals) {
+    return const _HomeEmptyStateMessages(
+      heroMessage:
+          'Play or like a few songs first so Musix can start building personalized recommendations for you.',
+      mayYouLikeMessage:
+          'May You Like will appear after you play, like, and finish a few songs.',
+    );
+  }
+
+  if (error.isNotEmpty) {
+    return _HomeEmptyStateMessages(
+      heroMessage: error,
+      mayYouLikeMessage:
+          'May You Like could not be refreshed right now. Pull to refresh and try again.',
+    );
+  }
+
+  return const _HomeEmptyStateMessages(
+    heroMessage:
+        'Play local songs, like music, or reconnect to load personalized recommendations here.',
+    mayYouLikeMessage:
+        'Play, like, and finish songs to train your personalized May You Like section.',
+  );
+}
+
 bool _isLikedArtistsSectionTitle(String rawTitle) {
   final String lower = rawTitle.trim().toLowerCase();
   return lower.startsWith('from your liked') ||
@@ -269,6 +338,9 @@ class _HomeScreenState extends State<_HomeScreen>
     final bool showRecommendationLoadingState =
         !hasRevealableContent &&
         (controller.homeLoading || !controller.homeRefreshResolvedOnce);
+    final _HomeEmptyStateMessages emptyStateMessages = _homeEmptyStateMessages(
+      controller,
+    );
     final List<LibrarySong> jumpBackIn = controller.recentlyPlayedSongs
         .take(4)
         .toList(growable: false);
@@ -320,9 +392,8 @@ class _HomeScreenState extends State<_HomeScreen>
                       onListenNow: featured.onListenNow,
                     )
                   else
-                    const _PersonalizationHintCard(
-                      message:
-                          'Play local songs, like tracks, or reconnect to load personalized recommendations here.',
+                    _PersonalizationHintCard(
+                      message: emptyStateMessages.heroMessage,
                     ),
                   const SizedBox(height: 18),
                   _MusixSectionHeader(
@@ -344,13 +415,13 @@ class _HomeScreenState extends State<_HomeScreen>
                   if (showRecommendationLoadingState)
                     const _MusixListSkeleton(count: 4)
                   else if (mayYouLike.isEmpty)
-                    const _PersonalizationHintCard(
-                      message:
-                          'Play, like, and finish songs to train your personalized May You Like section.',
+                    _PersonalizationHintCard(
+                      message: emptyStateMessages.mayYouLikeMessage,
                     )
                   else
                     _ProgressiveListReveal(
                       itemCount: mayYouLike.length,
+                      animateItems: false,
                       showTrailingPlaceholders: true,
                       itemBuilder: (BuildContext context, int index) {
                         final LibrarySong song = mayYouLike[index];
@@ -502,7 +573,7 @@ class _HomeOfflineState extends StatelessWidget {
                     : 'No Internet Connection',
                 message: controller.offlineMusicMode
                     ? 'Only your local music is active right now. Online recommendations, search, and cloud content stay paused while you are offline.'
-                    : 'Home recommendations need internet. Your saved and local tracks stay available until the connection comes back.',
+                    : 'Home recommendations need internet. Your saved and local songs stay available until the connection comes back.',
                 actionLabel: 'Retry',
                 onAction: () async {
                   await controller.refreshConnectivityStatus();
@@ -638,6 +709,7 @@ Widget _buildHomeShelf({
       const SizedBox(height: 8),
       _ProgressiveListReveal(
         itemCount: songs.length,
+        animateItems: false,
         showTrailingPlaceholders: true,
         itemBuilder: (BuildContext context, int index) {
           final LibrarySong song = songs[index];
@@ -1637,9 +1709,9 @@ double _heroCandidateScore(
   score += _hasArtwork(song) * 16;
   score += _durationScore(song) * 3.5;
   score += _titleScore(song) * 2.5;
-  if (song.sourceLabel == 'YouTube Music') {
+  if (song.sourceLabel == 'Online Music') {
     score += 8;
-  } else if (song.sourceLabel == 'YouTube') {
+  } else if (song.sourceLabel == 'Online Stream') {
     score += 4;
   }
   if ((song.year ?? 0) >= DateTime.now().year - 4) {
@@ -1992,8 +2064,8 @@ LibrarySong? _pickFallbackHeroSong({
           if (artworkCompare != 0) {
             return artworkCompare;
           }
-          final int sourceCompare = (b.sourceLabel == 'YouTube Music' ? 1 : 0)
-              .compareTo(a.sourceLabel == 'YouTube Music' ? 1 : 0);
+          final int sourceCompare = (b.sourceLabel == 'Online Music' ? 1 : 0)
+              .compareTo(a.sourceLabel == 'Online Music' ? 1 : 0);
           if (sourceCompare != 0) {
             return sourceCompare;
           }
@@ -2559,69 +2631,59 @@ class _RecentPlaysScreen extends StatelessWidget {
         final MusixController liveController = context.read<MusixController>();
 
         return _MusixSubscreenScaffold(
-      title: _HomeText.jumpBackIn,
-      actions: <Widget>[
-        TextButton.icon(
-          onPressed: songs.isEmpty
-              ? null
-              : () async {
-                  final bool confirmed = await _showMusixConfirmDialog(
-                    context: context,
-                    title: 'Clear?',
-                    message:
-                        'This clears Jump Back In history and removes its playback traces.',
-                    confirmLabel: 'Clear',
-                    cancelLabel: 'Cancel',
-                    confirmColor: const Color(0xFFDE6B48),
-                  );
-                  if (!confirmed || !context.mounted) {
-                    return;
-                  }
-                  await liveController.clearPlaybackHistory();
-                  if (context.mounted) {
-                    _showMusixSnackBar(context, 'Playback history cleared');
-                  }
-                },
-          icon: const Icon(Icons.history_toggle_off_rounded),
-          label: const Text('Clear'),
-          style: TextButton.styleFrom(
-            foregroundColor: _kAccent,
-            backgroundColor: const Color(0x221C0904),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: const BorderSide(color: _kSurfaceEdge),
+          title: _HomeText.jumpBackIn,
+          actions: <Widget>[
+            _MusixHeaderActionButton(
+              icon: Icons.history_toggle_off_rounded,
+              onPressed: songs.isEmpty
+                  ? null
+                  : () async {
+                      final bool confirmed = await _showMusixConfirmDialog(
+                        context: context,
+                        title: 'Clear?',
+                        message:
+                            'This clears Jump Back In history and removes its playback traces.',
+                        confirmLabel: 'Clear',
+                        cancelLabel: 'Cancel',
+                        confirmColor: const Color(0xFFDE6B48),
+                      );
+                      if (!confirmed || !context.mounted) {
+                        return;
+                      }
+                      await liveController.clearPlaybackHistory();
+                      if (context.mounted) {
+                        _showMusixSnackBar(context, 'Playback history cleared');
+                      }
+                    },
             ),
-          ),
-        ),
-      ],
-      child: songs.isEmpty
-          ? Builder(
-              builder: (BuildContext context) {
-                return Text(
-                  'Play songs and they will appear here.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFFFFC8A9),
-                  ),
-                );
-              },
-            )
-          : _ProgressiveListReveal(
-              itemCount: songs.length,
-              itemBuilder: (BuildContext context, int index) {
-                final LibrarySong song = songs[index];
-                return _SimplePlaybackTile(
-                  song: song,
-                  onTap: () {
-                    if (song.isRemote) {
-                      liveController.playOnlineSong(song);
-                    } else {
-                      liveController.playSong(song, label: 'Jump back in');
-                    }
+          ],
+          child: songs.isEmpty
+              ? Builder(
+                  builder: (BuildContext context) {
+                    return Text(
+                      'Play songs and they will appear here.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFFFFC8A9),
+                      ),
+                    );
                   },
-                );
-              },
-            ),
+                )
+              : _ProgressiveListReveal(
+                  itemCount: songs.length,
+                  itemBuilder: (BuildContext context, int index) {
+                    final LibrarySong song = songs[index];
+                    return _SimplePlaybackTile(
+                      song: song,
+                      onTap: () {
+                        if (song.isRemote) {
+                          liveController.playOnlineSong(song);
+                        } else {
+                          liveController.playSong(song, label: 'Jump back in');
+                        }
+                      },
+                    );
+                  },
+                ),
         );
       },
     );
@@ -2762,6 +2824,66 @@ class _MusixSubscreenHeader extends StatelessWidget {
   }
 }
 
+class _MusixHeaderActionButton extends StatelessWidget {
+  const _MusixHeaderActionButton({
+    required this.icon,
+    required this.onPressed,
+    this.primary = false,
+    this.destructive = false,
+  });
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool primary;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool enabled = onPressed != null;
+    final Color accent = destructive
+        ? const Color(0xFFFF8D74)
+        : const Color(0xFFFF8A2A);
+    final Color fill = enabled
+        ? primary
+              ? accent.withValues(alpha: 0.20)
+              : const Color(0xFF25110B).withValues(alpha: 0.84)
+        : const Color(0xFF25110B).withValues(alpha: 0.36);
+    final Color border = enabled
+        ? primary
+              ? accent.withValues(alpha: 0.46)
+              : accent.withValues(alpha: destructive ? 0.32 : 0.22)
+        : Colors.white.withValues(alpha: 0.07);
+    final Color iconColor = enabled
+        ? accent
+        : const Color(0xFFC89373).withValues(alpha: 0.48);
+
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(14),
+            child: Ink(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: border),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MayYouLikeScreen extends StatefulWidget {
   const _MayYouLikeScreen({required this.controller});
 
@@ -2864,11 +2986,13 @@ class _ProgressiveListReveal extends StatefulWidget {
   const _ProgressiveListReveal({
     required this.itemCount,
     required this.itemBuilder,
+    this.animateItems = true,
     this.showTrailingPlaceholders = false,
   });
 
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
+  final bool animateItems;
   final bool showTrailingPlaceholders;
 
   @override
@@ -2911,6 +3035,15 @@ class _ProgressiveListRevealState extends State<_ProgressiveListReveal> {
   }) {
     _timer?.cancel();
     if (!mounted) {
+      return;
+    }
+
+    if (!widget.animateItems) {
+      final bool needsUpdate = _visibleCount != widget.itemCount;
+      _visibleCount = widget.itemCount;
+      if (allowImmediateSetState && needsUpdate) {
+        setState(() {});
+      }
       return;
     }
 

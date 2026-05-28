@@ -24,7 +24,7 @@ class _DesktopLibraryScreen extends StatelessWidget {
               title: 'Saved Songs',
               seed: 'cached_songs',
               songs: cachedSongs,
-              subtitle: '${cachedSongs.length} saved tracks',
+              subtitle: '${cachedSongs.length} saved songs',
             ),
           ...playlists.map((UserPlaylist playlist) {
             final List<LibrarySong> playlistSongs = controller.songsForPlaylist(
@@ -35,7 +35,7 @@ class _DesktopLibraryScreen extends StatelessWidget {
               seed: playlist.id,
               songs: playlistSongs,
               playlist: playlist,
-              subtitle: '${playlist.displaySongCount} tracks',
+              subtitle: '${playlist.displaySongCount} songs',
             );
           }),
         ].toList(growable: false);
@@ -62,12 +62,14 @@ class _DesktopLibraryScreen extends StatelessWidget {
                     child: _LibraryFeatureCard(
                       title: 'Downloads',
                       subtitle: hasDownloads
-                          ? '${downloadedSongs.length} saved'
+                          ? '${downloadedSongs.length} songs ready'
                           : 'Save music',
                       icon: Icons.downloading_outlined,
                       accent: const Color(0xFFFF8C43),
                       secondary: const Color(0xFFCC5A18),
                       watermark: Icons.download_for_offline_rounded,
+                      iconBackgroundColor: Colors.white.withValues(alpha: 0.15),
+                      iconColor: Colors.white.withValues(alpha: 0.55),
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
@@ -90,11 +92,12 @@ class _DesktopLibraryScreen extends StatelessWidget {
                       subtitle: controller.supportsLocalFileImport
                           ? 'Import or browse'
                           : 'Ready anytime',
-                      icon: Icons.folder,
+                      icon: CupertinoIcons.folder_solid,
                       accent: const Color(0xFF4A1D06),
                       secondary: const Color(0xFF512007),
                       watermark: Icons.folder,
                       darkText: false,
+                      iconColor: Colors.white.withValues(alpha: 0.7),
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(

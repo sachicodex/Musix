@@ -617,6 +617,17 @@ class FirestoreUserDataService {
       return;
     }
 
+    final UserPlaylist? remotePlaylist = await loadPlaylistMetadata(playlist.id);
+    final DateTime? localRevision = playlist.lastSyncedAt;
+    if (remotePlaylist != null &&
+        localRevision != null &&
+        remotePlaylist.updatedAt.isAfter(localRevision)) {
+      throw const FirestoreUserDataException(
+        'This playlist changed on another device before your edit was synced.',
+        code: 'playlist-conflict',
+      );
+    }
+
     final List<String> sanitizedSongIds = playlist.songIds
         .map((String id) => id.trim())
         .where((String id) => id.isNotEmpty)
@@ -740,6 +751,49 @@ class FirestoreUserDataService {
     } catch (_) {
       throw const FirestoreUserDataException(
         'Could not delete the playlist from Firestore.',
+      );
+    }
+  }
+
+  Future<UserPlaylist?> loadPlaylistMetadata(String playlistId) async {
+    final User? user = _firebaseAuth.currentUser;
+    if (user == null) {
+      return null;
+    }
+
+    if (_useRestApiOnWindows) {
+      try {
+        final Map<String, dynamic>? document = await _getRestDocument(
+          _playlistDocumentPath(user.uid, playlistId),
+        );
+        if (document == null) {
+          return null;
+        }
+        return _playlistMetadataFromRestDocument(document);
+      } on FirestoreUserDataException {
+        rethrow;
+      } catch (_) {
+        throw const FirestoreUserDataException(
+          'Could not load the playlist metadata from Firestore.',
+        );
+      }
+    }
+
+    try {
+      final DocumentSnapshot<Map<String, dynamic>> snapshot =
+          await _playlistsCollection(user.uid).doc(playlistId).get();
+      if (!snapshot.exists) {
+        return null;
+      }
+      return _playlistMetadataFromData(
+        id: snapshot.id,
+        data: snapshot.data() ?? <String, dynamic>{},
+      );
+    } on FirebaseException catch (error) {
+      throw FirestoreUserDataException(_friendlyMessage(error));
+    } catch (_) {
+      throw const FirestoreUserDataException(
+        'Could not load the playlist metadata from Firestore.',
       );
     }
   }
@@ -1967,9 +2021,16 @@ class FirestoreUserDataService {
   UserPlaylist _playlistMetadataFromSnapshot(
     QueryDocumentSnapshot<Map<String, dynamic>> snapshot,
   ) {
+    return _playlistMetadataFromData(id: snapshot.id, data: snapshot.data());
+  }
+
+  UserPlaylist _playlistMetadataFromData({
+    required String id,
+    required Map<String, dynamic> data,
+  }) {
     return _playlistFromData(
-      id: snapshot.id,
-      data: snapshot.data(),
+      id: id,
+      data: data,
       songIds: const <String>[],
       songIdsComplete: false,
     );
@@ -1992,6 +2053,7 @@ class FirestoreUserDataService {
       songIdsComplete: songIdsComplete,
       createdAt: _readDateTime(data['createdAt']),
       updatedAt: _readDateTime(data['updatedAt']),
+      lastSyncedAt: _readNullableDateTime(data['updatedAt']),
     );
   }
 

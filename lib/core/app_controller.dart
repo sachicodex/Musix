@@ -557,7 +557,8 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     if (_isSongExplicitlyDisliked(song)) {
       return false;
     }
-    return !(song.isRemote && song.sourceLabel == 'YouTube');
+    return !(song.isRemote &&
+        (song.sourceLabel == 'Online Stream' || song.sourceLabel == 'YouTube'));
   }
 
   bool _shouldCacheSongForOfflinePlayback(LibrarySong song) {
@@ -1115,7 +1116,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     final int startIndex = _queueIndex + 1;
-    final int preloadCount = _settings.preloadNextSongCount.clamp(0, 5);
+    final int preloadCount = _settings.preloadNextSongCount.clamp(0, 3);
     if (preloadCount <= 0) {
       await _disposeStandbyPreloads();
       return;
@@ -1994,8 +1995,9 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     final DateTime? endAt = _sleepTimerEndAt;
     if (endAt != null) {
       final Duration remaining = endAt.difference(DateTime.now());
-      _sleepTimerRemainingDuration =
-          remaining.isNegative ? Duration.zero : remaining;
+      _sleepTimerRemainingDuration = remaining.isNegative
+          ? Duration.zero
+          : remaining;
     } else {
       _sleepTimerRemainingDuration ??= Duration(minutes: sleepTimerMinutes);
     }
@@ -2026,10 +2028,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     _sleepTimerStopInFlight = true;
-    AppLogger.info(
-      'SleepTimer',
-      'Stopping playback after inactivity timeout',
-    );
+    AppLogger.info('SleepTimer', 'Stopping playback after inactivity timeout');
     try {
       _clearSleepTimerRuntimeState();
       _sleepTimerMinutes = 0;
@@ -2793,9 +2792,101 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         a.name == b.name &&
         a.createdAt == b.createdAt &&
         a.updatedAt == b.updatedAt &&
+        a.lastSyncedAt == b.lastSyncedAt &&
         a.songCount == b.songCount &&
         a.songIdsComplete == b.songIdsComplete &&
         listEquals(a.songIds, b.songIds);
+  }
+
+  List<String> _mergePlaylistSongIds({
+    required List<String> baseSongIds,
+    required List<String> localSongIds,
+    required List<String> remoteSongIds,
+  }) {
+    final Set<String> baseSet = baseSongIds.toSet();
+    final Set<String> localSet = localSongIds.toSet();
+    final Set<String> removals = baseSet.difference(localSet);
+    final List<String> merged = remoteSongIds
+        .where((String songId) => !removals.contains(songId))
+        .toList(growable: true);
+    final List<String> additions = localSongIds
+        .where((String songId) => !baseSet.contains(songId))
+        .toList(growable: false);
+
+    for (final String songId in additions) {
+      if (merged.contains(songId)) {
+        continue;
+      }
+      final int localIndex = localSongIds.indexOf(songId);
+      int insertIndex = merged.length;
+
+      for (int index = localIndex - 1; index >= 0; index--) {
+        final int mergedIndex = merged.indexOf(localSongIds[index]);
+        if (mergedIndex >= 0) {
+          insertIndex = mergedIndex + 1;
+          break;
+        }
+      }
+
+      if (insertIndex == merged.length) {
+        for (int index = localIndex + 1; index < localSongIds.length; index++) {
+          final int mergedIndex = merged.indexOf(localSongIds[index]);
+          if (mergedIndex >= 0) {
+            insertIndex = mergedIndex;
+            break;
+          }
+        }
+      }
+
+      merged.insert(insertIndex.clamp(0, merged.length), songId);
+    }
+
+    return merged;
+  }
+
+  UserPlaylist _mergePlaylistConflict({
+    required UserPlaylist base,
+    required UserPlaylist local,
+    required UserPlaylist remote,
+  }) {
+    final bool nameChangedLocally = local.name != base.name;
+    final List<String> mergedSongIds = _mergePlaylistSongIds(
+      baseSongIds: base.songIds,
+      localSongIds: local.songIds,
+      remoteSongIds: remote.songIds,
+    );
+    return remote.copyWith(
+      name: nameChangedLocally ? local.name : remote.name,
+      songIds: mergedSongIds,
+      songCount: mergedSongIds.length,
+      songIdsComplete: true,
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  Future<void> _markPlaylistCloudSynced(
+    String playlistId,
+    DateTime syncedAt,
+  ) async {
+    bool changed = false;
+    _playlists = _playlists
+        .map((UserPlaylist playlist) {
+          if (playlist.id != playlistId ||
+              playlist.lastSyncedAt == syncedAt ||
+              playlist.updatedAt != syncedAt) {
+            return playlist;
+          }
+          changed = true;
+          return playlist.copyWith(lastSyncedAt: syncedAt);
+        })
+        .toList(growable: false);
+    if (!changed) {
+      return;
+    }
+    await _saveSnapshot();
+    if (!_isDisposed && !_isDisposing) {
+      notifyListeners();
+    }
   }
 
   bool _sameCloudRevision(DateTime? a, DateTime? b) {
@@ -3203,7 +3294,11 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _syncPlaylistToCloud(UserPlaylist playlist) async {
+  Future<void> _syncPlaylistToCloud(
+    UserPlaylist playlist, {
+    UserPlaylist? basePlaylist,
+    bool allowConflictMerge = true,
+  }) async {
     final FirestoreUserDataService? service = _firestoreUserDataService;
     if (service == null || service.currentUserId == null) {
       return;
@@ -3211,7 +3306,55 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
 
     try {
       await service.upsertPlaylist(playlist);
+      await _markPlaylistCloudSynced(playlist.id, playlist.updatedAt);
     } on FirestoreUserDataException catch (error) {
+      if (error.code == 'playlist-conflict' && allowConflictMerge) {
+        final UserPlaylist? remotePlaylist = await service.loadPlaylistSongs(
+          playlist.id,
+        );
+        final UserPlaylist? latestLocal = _playlists.firstWhereOrNull(
+          (UserPlaylist item) => item.id == playlist.id,
+        );
+        final UserPlaylist localPlaylist = latestLocal ?? playlist;
+        if (remotePlaylist == null) {
+          await service.upsertPlaylist(localPlaylist);
+          await _markPlaylistCloudSynced(
+            localPlaylist.id,
+            localPlaylist.updatedAt,
+          );
+          return;
+        }
+        final UserPlaylist comparisonBase = basePlaylist ?? remotePlaylist;
+        final UserPlaylist mergedPlaylist = _mergePlaylistConflict(
+          base: comparisonBase,
+          local: localPlaylist,
+          remote: remotePlaylist,
+        );
+        _playlists =
+            _playlists
+                .map((UserPlaylist item) {
+                  return item.id == mergedPlaylist.id ? mergedPlaylist : item;
+                })
+                .toList(growable: false)
+              ..sort(_sortUserPlaylists);
+        _markLibraryDataDirty('playlist conflict merged');
+        await _saveSnapshot();
+        if (!_isDisposed && !_isDisposing) {
+          notifyListeners();
+        }
+        await _syncPlaylistToCloud(
+          mergedPlaylist,
+          basePlaylist: remotePlaylist,
+          allowConflictMerge: false,
+        );
+        _queueCloudSyncMessage(
+          'This playlist changed on another device, so the latest versions were merged before syncing.',
+        );
+        if (!_isDisposed && !_isDisposing) {
+          notifyListeners();
+        }
+        return;
+      }
       _queueCloudSyncMessage(
         '${error.message} The playlist change was kept only on this device.',
       );
@@ -3921,26 +4064,36 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       final List<HomeFeedSection> sections = <HomeFeedSection>[];
       final Set<String> consumedIds = <String>{};
       final Set<String> consumedKeys = <String>{};
+      Object? firstRecommendationError;
+
+      void rememberRecommendationError(String source, Object error) {
+        firstRecommendationError ??= error;
+        _recordHomeRecommendationError(source: source, error: error);
+      }
 
       if (seedSong != null) {
-        final HomeFeedSection? radioSection = await _buildYtMusicRadioSection(
-          seedSong,
-          excludedIds: consumedIds,
-        );
-        if (radioSection != null) {
-          sections.add(radioSection);
-          consumedIds.addAll(
-            radioSection.songs.take(4).map((LibrarySong song) => song.id),
+        try {
+          final HomeFeedSection? radioSection = await _buildYtMusicRadioSection(
+            seedSong,
+            excludedIds: consumedIds,
           );
-          consumedKeys.addAll(
-            radioSection.songs
-                .take(8)
-                .map((LibrarySong song) => _songIdentityKey(song)),
-          );
-          _commitHomeFeedSections(
-            List<HomeFeedSection>.from(sections),
-            seedSong: seedSong,
-          );
+          if (radioSection != null) {
+            sections.add(radioSection);
+            consumedIds.addAll(
+              radioSection.songs.take(4).map((LibrarySong song) => song.id),
+            );
+            consumedKeys.addAll(
+              radioSection.songs
+                  .take(8)
+                  .map((LibrarySong song) => _songIdentityKey(song)),
+            );
+            _commitHomeFeedSections(
+              List<HomeFeedSection>.from(sections),
+              seedSong: seedSong,
+            );
+          }
+        } catch (error) {
+          rememberRecommendationError('radio for ${seedSong.title}', error);
         }
       }
 
@@ -3957,6 +4110,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         force: force,
         already: sections,
         desiredCount: 6,
+        onRecommendationError: rememberRecommendationError,
         onSectionsChanged: (List<HomeFeedSection> updated) {
           _commitHomeFeedSections(updated, seedSong: seedSong);
         },
@@ -3966,12 +4120,16 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       if (_homeFeed.isEmpty && _personalizedHomeRecommendations.isEmpty) {
         _homeFeed = previousFeed;
         _personalizedHomeRecommendations = previousPersonalized;
-        _homeError = previousFeed.isEmpty
+        final Object? recommendationError = firstRecommendationError;
+        _homeError = recommendationError != null
+            ? _friendlyOnlineError(recommendationError)
+            : previousFeed.isEmpty
             ? 'No recommendations available right now.'
             : 'Recommendations could not be refreshed right now.';
       }
     } catch (error) {
-      if (_isConnectivityError(error)) {
+      _recordHomeRecommendationError(source: 'home refresh', error: error);
+      if (_isConnectivityError(error) && !_isTimeoutError(error)) {
         _setConnectivityOffline(true, notify: false, announceLoss: true);
       }
       _homeError = _friendlyOnlineError(error);
@@ -4000,20 +4158,35 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     _homeError = null;
     notifyListeners();
 
+    Object? firstRecommendationError;
+
+    void rememberRecommendationError(String source, Object error) {
+      firstRecommendationError ??= error;
+      _recordHomeRecommendationError(source: source, error: error);
+    }
+
     try {
       final LibrarySong? seedSong = _primaryRecommendationSeed();
+      final int previousSectionCount = _homeFeed.length;
       final List<HomeFeedSection> expanded = await _loadMoreHomeSections(
         seedSong: seedSong,
         force: false,
         already: List<HomeFeedSection>.from(_homeFeed),
         desiredCount: desiredTotal,
+        onRecommendationError: rememberRecommendationError,
       );
       _commitHomeFeedSections(
         expanded,
         seedSong: seedSong,
         preservePersonalized: true,
       );
+      final Object? recommendationError = firstRecommendationError;
+      if (recommendationError != null &&
+          expanded.length <= previousSectionCount) {
+        _homeError = _friendlyOnlineError(recommendationError);
+      }
     } catch (error) {
+      _recordHomeRecommendationError(source: 'home pagination', error: error);
       _homeError = _friendlyOnlineError(error);
     } finally {
       _homeLoading = false;
@@ -4026,6 +4199,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     required bool force,
     required List<HomeFeedSection> already,
     required int desiredCount,
+    void Function(String source, Object error)? onRecommendationError,
     void Function(List<HomeFeedSection> sections)? onSectionsChanged,
   }) async {
     final List<HomeFeedSection> sections = already;
@@ -4053,12 +4227,23 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         recycledQueries = true;
       }
 
-      final List<LibrarySong> rawResults = await _searchSongs(
-        query.query,
-        limit: 22,
-        force: force || recycledQueries,
-        usageBucket: _AppNetworkUsageBucket.load,
-      );
+      final List<LibrarySong> rawResults;
+      try {
+        rawResults = await _searchSongs(
+          query.query,
+          limit: 22,
+          force: force || recycledQueries,
+          usageBucket: _AppNetworkUsageBucket.load,
+        );
+      } catch (error) {
+        final String source = 'query "${query.query}"';
+        if (onRecommendationError != null) {
+          onRecommendationError(source, error);
+        } else {
+          _recordHomeRecommendationError(source: source, error: error);
+        }
+        continue;
+      }
       final List<LibrarySong> ranked = _rankRecommendedSongs(
         rawResults,
         anchor: query.anchor ?? seedSong,
@@ -4199,6 +4384,14 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       return _searchCache[cacheKey]!;
     }
 
+    final LibrarySong? directUrlSong = await _resolveSongFromUrlInput(trimmed);
+    if (directUrlSong != null) {
+      final List<LibrarySong> directResults = <LibrarySong>[directUrlSong];
+      _searchCache[cacheKey] = directResults;
+      _rememberTransientSong(directUrlSong);
+      return directResults;
+    }
+
     try {
       final List<LibrarySong> songs = await _searchOnlineMusic(
         trimmed,
@@ -4324,7 +4517,8 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       } else {
         _ytMusicSearchCache[cacheKey] = songs;
       }
-    } catch (_) {
+    } catch (error) {
+      _debugLog('YTMusic search failed for "$trimmed": $error');
       _ytMusicSearchCache[cacheKey] = <LibrarySong>[];
     }
 
@@ -4374,7 +4568,8 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       }
       _searchCache[cacheKey] = ranked;
       return ranked;
-    } catch (_) {
+    } catch (error) {
+      _debugLog('YouTube fallback search failed for "$trimmed": $error');
       _searchCache[cacheKey] = <LibrarySong>[];
       return <LibrarySong>[];
     }
@@ -4475,14 +4670,47 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
+  void _recordHomeRecommendationError({
+    required String source,
+    required Object error,
+  }) {
+    _debugLog('Home recommendation $source failed: $error');
+    if (_isConnectivityError(error) && !_isTimeoutError(error)) {
+      _setConnectivityOffline(true, notify: false, announceLoss: true);
+    }
+  }
+
+  bool _isTimeoutError(Object error) {
+    final String message = '$error'.toLowerCase();
+    return error is TimeoutException ||
+        message.contains('timed out') ||
+        message.contains('timeout');
+  }
+
   String _friendlyOnlineError(Object error) {
     final String message = '$error'.toLowerCase();
+    if (_isTimeoutError(error)) {
+      return 'Online recommendations took too long to respond. Pull to refresh and try again.';
+    }
+    if (_isConnectivityError(error)) {
+      return 'No internet connection. Reconnect and refresh to load online recommendations.';
+    }
     if (message.contains('redirect limit exceeded') ||
         message.contains('google_abuse_exemption') ||
-        message.contains('clientexception')) {
-      return 'Online recommendations are temporarily limited by YouTube. The app will retry automatically.';
+        message.contains('clientexception') ||
+        message.contains('too many requests') ||
+        message.contains('rate limit') ||
+        message.contains('quota') ||
+        message.contains('status code: 403') ||
+        message.contains('status code: 429')) {
+      return 'Online recommendations are temporarily limited. The app will retry automatically.';
     }
-    return 'Online music is unavailable right now. Please try again shortly.';
+    if (message.contains('format') ||
+        message.contains('type ') ||
+        message.contains('unexpected')) {
+      return 'Online recommendations returned an unexpected response. Pull to refresh and try again.';
+    }
+    return 'Online recommendations could not be loaded right now. Pull to refresh or try again shortly.';
   }
 
   Future<List<LibrarySong>> _ytMusicRadioSongs(
@@ -4499,11 +4727,9 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       return <LibrarySong>[];
     }
 
-    final Map<String, dynamic> response = await client.getWatchPlaylist(
-      videoId: videoId,
-      radio: true,
-      limit: limit + 4,
-    );
+    final Map<String, dynamic> response = await client
+        .getWatchPlaylist(videoId: videoId, radio: true, limit: limit + 4)
+        .timeout(const Duration(seconds: 8));
     final List<dynamic> tracks =
         response['tracks'] as List<dynamic>? ?? <dynamic>[];
     final List<LibrarySong> songs = tracks
@@ -4572,7 +4798,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
 
     final String title = '${data['title'] ?? 'Unknown title'}'.trim();
     final String artist = _readArtistName(data) ?? 'Unknown artist';
-    final String album = _readAlbumName(data) ?? 'YouTube Music';
+    final String album = _readAlbumName(data) ?? 'Online Music';
     final String? artworkUrl = _readThumbnailUrl(data);
     final int durationMs = _parseDurationMs(
       data['duration'] ?? data['length'] ?? data['lengthSeconds'],
@@ -4585,9 +4811,9 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       artist: artist,
       album: album,
       albumArtist: artist,
-      folderName: 'YouTube Music',
+      folderName: 'Online Music',
       folderPath: 'ytmusic',
-      sourceLabel: 'YouTube Music',
+      sourceLabel: 'Online Music',
       addedAt: DateTime.now(),
       durationMs: durationMs,
       isRemote: true,
@@ -4794,9 +5020,11 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     final String album = _normalizeToken(song.album);
     final String haystack = '$title $artist $album';
 
-    if (song.sourceLabel == 'YouTube Music') {
+    if (song.sourceLabel == 'Online Music' ||
+        song.sourceLabel == 'YouTube Music') {
       score += 12;
-    } else if (song.sourceLabel == 'YouTube') {
+    } else if (song.sourceLabel == 'Online Stream' ||
+        song.sourceLabel == 'YouTube') {
       score += 2;
     }
 
@@ -5359,6 +5587,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       if (addedCount > 0 && _queueSongIds.length > 1) {
         if (_queueLabel == 'Song' ||
             _queueLabel == 'Now Playing' ||
+            _queueLabel == 'Online Music' ||
             _queueLabel == 'YouTube' ||
             _queueLabel == 'URL Stream') {
           _queueLabel = 'Smart queue';
@@ -5710,7 +5939,8 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
           if ((song.artworkUrl ?? '').trim().isNotEmpty) {
             score += 1.2;
           }
-          if (song.sourceLabel == 'YouTube Music') {
+          if (song.sourceLabel == 'Online Music' ||
+              song.sourceLabel == 'YouTube Music') {
             score += 1.8;
           }
           if (!fullListenIds.contains(song.id) &&
@@ -6182,9 +6412,12 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       } else {
         positiveFreshPlays += 1;
       }
-      if (song.sourceLabel == 'YouTube Music') {
+      if (song.sourceLabel == 'Online Music' ||
+          song.sourceLabel == 'YouTube Music') {
         mainstreamPositiveWeight += 1.2;
-      } else if (song.sourceLabel == 'YouTube' || song.sourceLabel == 'URL') {
+      } else if (song.sourceLabel == 'Online Stream' ||
+          song.sourceLabel == 'YouTube' ||
+          song.sourceLabel == 'URL') {
         independentPositiveWeight += 1.0;
       }
     }
@@ -7013,9 +7246,12 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     }
     score += tasteProfile.preferredYearWindowBoost(song.year);
 
-    if (song.sourceLabel == 'YouTube Music') {
+    if (song.sourceLabel == 'Online Music' ||
+        song.sourceLabel == 'YouTube Music') {
       score += (tasteProfile.popularityPreference - 0.5) * 4.0;
-    } else if (song.sourceLabel == 'YouTube' || song.sourceLabel == 'URL') {
+    } else if (song.sourceLabel == 'Online Stream' ||
+        song.sourceLabel == 'YouTube' ||
+        song.sourceLabel == 'URL') {
       score += (0.5 - tasteProfile.popularityPreference) * 2.8;
     }
 
@@ -7762,20 +7998,12 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     try {
-      if (_looksLikeYouTube(value)) {
-        final Video video = await _yt.videos.get(value);
-        final LibrarySong song = _videoToSong(video);
-        await playOnlineSong(song);
-        return;
-      }
-
-      final Uri? uri = Uri.tryParse(value);
-      if (uri == null || !uri.hasScheme) {
+      final LibrarySong? resolvedSong = await _resolveSongFromUrlInput(value);
+      if (resolvedSong == null) {
         throw const FormatException('Enter a valid URL.');
       }
 
-      final LibrarySong song = _urlToSong(uri);
-      final int selectionRevision = _startPlaybackSelection(song);
+      final int selectionRevision = _startPlaybackSelection(resolvedSong);
       await _clearPreparedPlaybackState();
       if (!_guardCurrentPlaybackSelection(
         selectionRevision,
@@ -7783,7 +8011,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       )) {
         return;
       }
-      final LibrarySong prepared = await _preparePlayableSong(song);
+      final LibrarySong prepared = await _preparePlayableSong(resolvedSong);
       if (!_guardCurrentPlaybackSelection(
         selectionRevision,
         'playFromUrl.after-prepare',
@@ -7836,7 +8064,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       }
       await _openPreparedSong(
         prepared,
-        label: 'YouTube',
+        label: 'Online Music',
         selectionRevision: selectionRevision,
       );
     } catch (error) {
@@ -8506,7 +8734,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
 
       _statusMessage = scanned.isEmpty
           ? 'No supported audio files found on this device.'
-          : 'Loaded ${scanned.length} tracks from device storage.';
+          : 'Loaded ${scanned.length} songs from device storage.';
       await _saveSnapshot();
     } catch (error) {
       _errorMessage = '$error';
@@ -8634,7 +8862,8 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       folderPath: folderPath,
       sourceLabel: _sourceLabelForPath(filePath),
       addedAt: previous?.addedAt ?? stat.changed,
-      durationMs: _durationMsFromAudioTag(tag?.duration) ??
+      durationMs:
+          _durationMsFromAudioTag(tag?.duration) ??
           _normalizeLegacyDurationMs(previous?.durationMs) ??
           0,
       genre: _cleanText(tag?.genre) ?? previous?.genre,
@@ -8682,11 +8911,11 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       path: 'https://www.youtube.com/watch?v=${video.id.value}',
       title: video.title,
       artist: video.author,
-      album: 'YouTube',
+      album: 'Online Stream',
       albumArtist: video.author,
-      folderName: 'YouTube',
+      folderName: 'Online Stream',
       folderPath: 'youtube',
-      sourceLabel: 'YouTube',
+      sourceLabel: 'Online Stream',
       addedAt: DateTime.now(),
       durationMs: video.duration?.inMilliseconds ?? 0,
       isRemote: true,
@@ -8711,6 +8940,29 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       isRemote: true,
       externalUrl: uri.toString(),
     );
+  }
+
+  Future<LibrarySong?> _resolveSongFromUrlInput(String input) async {
+    final String value = input.trim();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    try {
+      if (_looksLikeYouTube(value)) {
+        final Video video = await _yt.videos.get(value);
+        return _withKnownCloudPreferenceState(_videoToSong(video));
+      }
+
+      final Uri? uri = Uri.tryParse(value);
+      if (uri == null || !uri.hasScheme) {
+        return null;
+      }
+      return _withKnownCloudPreferenceState(_urlToSong(uri));
+    } catch (error) {
+      _debugLog('URL song resolution failed for "$value": $error');
+      return null;
+    }
   }
 
   bool _looksLikeYouTube(String value) {
@@ -9420,7 +9672,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       0,
       _queueSongIds.length - 1,
     );
-    final int preloadCount = _settings.preloadNextSongCount.clamp(0, 5);
+    final int preloadCount = _settings.preloadNextSongCount.clamp(0, 3);
     return math.min(_queueSongIds.length, anchorIndex + preloadCount + 1);
   }
 
@@ -9903,7 +10155,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         await _rankedPlaybackCandidatesForSong(song);
 
     if (rankedCandidates.isEmpty) {
-      throw const FormatException('No playable YouTube stream found.');
+      throw const FormatException('No playable online stream found.');
     }
 
     final int currentIndex = (_playbackCandidateIndexBySongId[song.id] ?? 0)
@@ -9945,7 +10197,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     final DateTime? backoffUntil = _youtubeRequestBackoffUntil;
     if (backoffUntil != null && DateTime.now().isBefore(backoffUntil)) {
       throw StateError(
-        'YouTube is temporarily rate limiting requests. Please wait a little and try again.',
+        'Online playback is temporarily rate limited. Please wait a little and try again.',
       );
     }
     final List<PlaybackStreamCandidate>? cachedCandidates =
@@ -10130,7 +10382,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
 
   String _friendlyPlaybackErrorMessage(Object error) {
     if (_isYouTubeRateLimitError(error)) {
-      return 'YouTube temporarily blocked requests from this device. Please wait a bit and try again.';
+      return 'Online playback is temporarily blocked from this device. Please wait a bit and try again.';
     }
     return '$error';
   }
@@ -10432,7 +10684,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         host.contains('youtu.be')) {
       final String referer = (song.externalUrl ?? '').trim().isNotEmpty
           ? song.externalUrl!
-          : song.sourceLabel == 'YouTube'
+          : song.sourceLabel == 'Online Stream' || song.sourceLabel == 'YouTube'
           ? 'https://www.youtube.com/'
           : 'https://music.youtube.com/';
       return <String, String>{
@@ -10906,7 +11158,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setPreloadNextSongCount(int value) async {
-    final int normalized = value.clamp(0, 5);
+    final int normalized = value.clamp(0, 3);
     if (_settings.preloadNextSongCount == normalized) {
       return;
     }
@@ -11731,6 +11983,9 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     if (trimmed.isEmpty) {
       return;
     }
+    final UserPlaylist? basePlaylist = _playlists.firstWhereOrNull(
+      (UserPlaylist playlist) => playlist.id == playlistId,
+    );
     _playlists =
         _playlists
             .map(
@@ -11747,12 +12002,12 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       (UserPlaylist playlist) => playlist.id == playlistId,
     );
     if (updated != null) {
-      unawaited(_syncPlaylistToCloud(updated));
+      unawaited(_syncPlaylistToCloud(updated, basePlaylist: basePlaylist));
     }
   }
 
   Future<void> addSongToPlaylist(String playlistId, String songId) async {
-    final UserPlaylist? current = _playlists.firstWhereOrNull(
+    UserPlaylist? current = _playlists.firstWhereOrNull(
       (UserPlaylist playlist) => playlist.id == playlistId,
     );
     if (current != null && !current.songIdsComplete) {
@@ -11767,6 +12022,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         return;
       }
+      current = loaded;
     }
     _playlists = _playlists.map((UserPlaylist playlist) {
       if (playlist.id != playlistId || playlist.songIds.contains(songId)) {
@@ -11786,12 +12042,12 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       (UserPlaylist playlist) => playlist.id == playlistId,
     );
     if (updated != null) {
-      unawaited(_syncPlaylistToCloud(updated));
+      unawaited(_syncPlaylistToCloud(updated, basePlaylist: current));
     }
   }
 
   Future<void> removeSongFromPlaylist(String playlistId, String songId) async {
-    final UserPlaylist? current = _playlists.firstWhereOrNull(
+    UserPlaylist? current = _playlists.firstWhereOrNull(
       (UserPlaylist playlist) => playlist.id == playlistId,
     );
     if (current != null && !current.songIdsComplete) {
@@ -11806,6 +12062,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         return;
       }
+      current = loaded;
     }
     _playlists = _playlists.map((UserPlaylist playlist) {
       if (playlist.id != playlistId) {
@@ -11828,7 +12085,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       (UserPlaylist playlist) => playlist.id == playlistId,
     );
     if (updated != null) {
-      unawaited(_syncPlaylistToCloud(updated));
+      unawaited(_syncPlaylistToCloud(updated, basePlaylist: current));
     }
   }
 
@@ -11877,7 +12134,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     String playlistId,
     int songIndex,
   ) async {
-    final UserPlaylist? current = _playlists.firstWhereOrNull(
+    UserPlaylist? current = _playlists.firstWhereOrNull(
       (UserPlaylist playlist) => playlist.id == playlistId,
     );
     if (current != null && !current.songIdsComplete) {
@@ -11892,11 +12149,10 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
         return null;
       }
+      current = loaded;
     }
 
-    final UserPlaylist? latest = _playlists.firstWhereOrNull(
-      (UserPlaylist playlist) => playlist.id == playlistId,
-    );
+    final UserPlaylist? latest = current;
     if (latest == null || songIndex < 0 || songIndex >= latest.songIds.length) {
       return null;
     }
@@ -11938,16 +12194,17 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     String songId, {
     int? index,
   }) async {
-    final UserPlaylist? current = _playlists.firstWhereOrNull(
+    UserPlaylist? current = _playlists.firstWhereOrNull(
       (UserPlaylist playlist) => playlist.id == playlistId,
     );
     if (current != null && !current.songIdsComplete) {
       await loadPlaylistSongsFromCloud(playlistId);
+      current = _playlists.firstWhereOrNull(
+        (UserPlaylist playlist) => playlist.id == playlistId,
+      );
     }
 
-    final UserPlaylist? latest = _playlists.firstWhereOrNull(
-      (UserPlaylist playlist) => playlist.id == playlistId,
-    );
+    final UserPlaylist? latest = current;
     if (latest == null) {
       return;
     }
@@ -11976,7 +12233,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       (UserPlaylist playlist) => playlist.id == playlistId,
     );
     if (updated != null) {
-      unawaited(_syncPlaylistToCloud(updated));
+      unawaited(_syncPlaylistToCloud(updated, basePlaylist: current));
     }
   }
 

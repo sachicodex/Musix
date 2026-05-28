@@ -85,15 +85,15 @@ class _ProfileScreenBody extends StatelessWidget {
         : preloadNextSongCount.toString();
     final String sleepTimerStatusLabel = view.sleepTimerStatusLabel;
     final String preferredRegion = view.preferredRegionLabel;
-    final String userName = authService.currentUserDisplayName;
+    final String userName = _profileDisplayName(
+      authService.currentUserDisplayName,
+    );
     final String userEmail = authService.currentUserEmail;
-    final String userId = authService.currentUserShortUid;
-    final bool emailVerified = authService.isCurrentUserEmailVerified;
     final LibrarySong? currentStreamSong = view.currentStreamSongId == null
         ? null
         : controller.currentSong;
-    final String currentStreamSizeLabel = currentStreamSong != null &&
-            view.currentStreamBitrateLabel != null
+    final String currentStreamSizeLabel =
+        currentStreamSong != null && view.currentStreamBitrateLabel != null
         ? controller.currentStreamSongDataLabel(
             song: currentStreamSong,
             info: controller.currentPlaybackStreamInfo!,
@@ -139,7 +139,7 @@ class _ProfileScreenBody extends StatelessWidget {
 
     Future<void> pickPreloadCount() async {
       final List<int> preloadOptions = List<int>.generate(
-        6,
+        4,
         (int value) => value,
       );
       final int? selected = await _showSettingsSelectionSheet<int, int>(
@@ -184,7 +184,7 @@ class _ProfileScreenBody extends StatelessWidget {
         subtitleOf: (int value) => switch (value) {
           0 => 'Disable the inactivity sleep timer',
           _ =>
-            'Tracks gestures and controls, and starts counting when playback starts',
+            'Monitors gestures and controls, and starts counting when playback starts',
         },
       );
       if (selected == null) {
@@ -247,7 +247,7 @@ class _ProfileScreenBody extends StatelessWidget {
                       children: <Widget>[
                         const SizedBox(height: 2),
                         Text(
-                          userName.toUpperCase(),
+                          userName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.headlineSmall
@@ -272,51 +272,6 @@ class _ProfileScreenBody extends StatelessWidget {
             ),
             const SizedBox(height: 14),
 
-            Container(
-              decoration: musixPanelDecoration(
-                radius: 20,
-                color: MusixColors.surface,
-                borderColor: MusixColors.surfaceEdge,
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      const Icon(
-                        Icons.person_outline_rounded,
-                        color: MusixColors.textMuted,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Account',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: _kTextPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  _ProfileRow(
-                    title: 'Email Verification',
-                    subtitle: emailVerified
-                        ? 'Your Firebase account email is verified.'
-                        : 'Email verification is currently not completed.',
-                    trailing: emailVerified ? 'Verified' : 'Pending',
-                  ),
-                  const Divider(color: MusixColors.surfaceEdge, height: 20),
-                  _ProfileRow(
-                    title: 'Firebase User ID',
-                    subtitle: 'Short reference for your signed-in account.',
-                    trailing: userId,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
             Container(
               decoration: musixPanelDecoration(
                 radius: 20,
@@ -380,7 +335,7 @@ class _ProfileScreenBody extends StatelessWidget {
                       ),
                     ),
                     subtitle: Text(
-                      'Tracks gestures and controls, and starts counting when playback starts',
+                      'Monitors gestures and controls, and starts counting when playback starts',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: MusixColors.textMuted,
                       ),
@@ -494,7 +449,7 @@ class _ProfileScreenBody extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    'Pulse Audio v4.2.1-stable',
+                    'Agenix 4.3.17',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       color: MusixColors.textMuted,
                       fontWeight: FontWeight.w600,
@@ -505,15 +460,6 @@ class _ProfileScreenBody extends StatelessWidget {
                     'Proudly built for music enthusiasts.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: MusixColors.textMuted.withValues(alpha: 0.8),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'PRIVACY      TERMS      CREDITS',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: MusixColors.textMuted,
-                      letterSpacing: 1.4,
-                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -537,68 +483,6 @@ class _ProfileScreenBody extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ProfileRow extends StatelessWidget {
-  const _ProfileRow({
-    required this.title,
-    required this.trailing,
-    this.subtitle,
-  });
-
-  final String title;
-  final String? subtitle;
-  final String trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final String displayTrailing = trailing;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: _kTextPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              if (subtitle != null) ...<Widget>[
-                const SizedBox(height: 2),
-                Text(
-                  subtitle!,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: MusixColors.textMuted),
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 132),
-          child: Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              displayTrailing,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: _kTextPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -668,6 +552,25 @@ Future<V?> _showSettingsSelectionSheet<T, V>({
       );
     },
   );
+}
+
+String _profileDisplayName(String value) {
+  final String trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return value;
+  }
+  return trimmed
+      .split(RegExp(r'\s+'))
+      .map((String word) {
+        if (word.isEmpty) {
+          return word;
+        }
+        if (word.length == 1) {
+          return word.toUpperCase();
+        }
+        return '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}';
+      })
+      .join(' ');
 }
 
 class _SettingsSelectionTile extends StatelessWidget {

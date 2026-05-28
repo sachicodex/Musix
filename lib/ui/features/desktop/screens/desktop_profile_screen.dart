@@ -17,10 +17,10 @@ class _DesktopProfileScreen extends StatelessWidget {
         ? 'Off'
         : preloadNextSongCount.toString();
     final String sleepTimerStatusLabel = controller.sleepTimerStatusLabel;
-    final String userName = authService.currentUserDisplayName;
+    final String userName = _profileDisplayName(
+      authService.currentUserDisplayName,
+    );
     final String userEmail = authService.currentUserEmail;
-    final String userId = authService.currentUserShortUid;
-    final bool emailVerified = authService.isCurrentUserEmailVerified;
     final LibrarySong? currentStreamSong = controller.currentSong;
     final PlaybackStreamInfo? currentStreamInfo =
         controller.currentPlaybackStreamInfo;
@@ -53,7 +53,7 @@ class _DesktopProfileScreen extends StatelessWidget {
 
     Future<void> pickPreloadCount() async {
       final List<int> preloadOptions = List<int>.generate(
-        6,
+        4,
         (int value) => value,
       );
       final int? selected = await _showSettingsSelectionSheet<int, int>(
@@ -98,7 +98,7 @@ class _DesktopProfileScreen extends StatelessWidget {
         subtitleOf: (int value) => switch (value) {
           0 => 'Disable the inactivity sleep timer',
           _ =>
-            'Tracks gestures and controls, and starts counting when playback starts',
+            'Monitors gestures and controls, and starts counting when playback starts',
         },
       );
       if (selected == null) {
@@ -111,7 +111,11 @@ class _DesktopProfileScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _DesktopPanel(
+          Container(
+            decoration: musixPanelDecoration(
+              color: MusixColors.surface,
+              borderColor: MusixColors.surfaceEdge,
+            ),
             padding: const EdgeInsets.all(24),
             child: Row(
               children: <Widget>[
@@ -135,7 +139,7 @@ class _DesktopProfileScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        userName.toUpperCase(),
+                        userName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.headlineMedium
@@ -166,54 +170,6 @@ class _DesktopProfileScreen extends StatelessWidget {
               final bool stacked = constraints.maxWidth < 1160;
               final Widget leftColumn = Column(
                 children: <Widget>[
-                  Container(
-                    decoration: musixPanelDecoration(
-                      color: MusixColors.surface,
-                      borderColor: MusixColors.surfaceEdge,
-                    ),
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Row(
-                          children: <Widget>[
-                            const Icon(
-                              Icons.person_outline_rounded,
-                              color: MusixColors.textMuted,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Account',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    color: _kTextPrimary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        _ProfileRow(
-                          title: 'Email Verification',
-                          subtitle: emailVerified
-                              ? 'Your Firebase account email is verified.'
-                              : 'Email verification is currently not completed.',
-                          trailing: emailVerified ? 'Verified' : 'Pending',
-                        ),
-                        const Divider(
-                          color: MusixColors.surfaceEdge,
-                          height: 24,
-                        ),
-                        _ProfileRow(
-                          title: 'Firebase User ID',
-                          subtitle:
-                              'Short reference for your signed-in account.',
-                          trailing: userId,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
                   Container(
                     decoration: musixPanelDecoration(
                       color: MusixColors.surface,
@@ -268,7 +224,7 @@ class _DesktopProfileScreen extends StatelessWidget {
                         _DesktopSettingsActionRow(
                           title: 'Sleep Timer',
                           subtitle:
-                              'Tracks gestures and controls, and starts counting when playback starts',
+                              'Monitors gestures and controls, and starts counting when playback starts',
                           trailing: GestureDetector(
                             onTap: pickSleepTimer,
                             child: Text(
@@ -372,7 +328,7 @@ class _DesktopProfileScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
-                          'Pulse Audio v4.2.1-stable',
+                          'Agenix 4.3.17',
                           style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(
                                 color: MusixColors.textMuted,
@@ -387,16 +343,6 @@ class _DesktopProfileScreen extends StatelessWidget {
                                 color: MusixColors.textMuted.withValues(
                                   alpha: 0.8,
                                 ),
-                              ),
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          'PRIVACY      TERMS      CREDITS',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: MusixColors.textMuted,
-                                letterSpacing: 1.4,
-                                fontWeight: FontWeight.w600,
                               ),
                         ),
                         const SizedBox(height: 18),

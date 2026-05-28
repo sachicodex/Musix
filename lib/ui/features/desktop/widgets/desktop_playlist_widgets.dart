@@ -78,39 +78,43 @@ class _DesktopPlaylistBox extends StatelessWidget {
               return ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 150),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: <Widget>[
                     artwork,
 
                     const SizedBox(width: 18),
                     Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: _musixBodyTextStyle(
-                              color: const Color(0xFFFFE2D2),
-                              fontSize: 22,
-                              fontWeight: FontWeight.w600,
-                              height: 0.98,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: _musixBodyTextStyle(
+                                color: const Color(0xFFFFE2D2),
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                height: 0.98,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            subtitle ??
-                                '${playlist?.displaySongCount ?? songs.length} tracks',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: _musixBodyTextStyle(
-                              color: const Color(0xFFD3A689),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
+                            const SizedBox(height: 8),
+                            Text(
+                              subtitle ??
+                                  '${playlist?.displaySongCount ?? songs.length} songs',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: _musixBodyTextStyle(
+                                color: const Color(0xFFD3A689),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -144,7 +148,7 @@ class _DesktopPlaylistBox extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   subtitle ??
-                      '${playlist?.displaySongCount ?? songs.length} tracks',
+                      '${playlist?.displaySongCount ?? songs.length} songs',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: _musixBodyTextStyle(

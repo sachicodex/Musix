@@ -275,7 +275,7 @@ class AppSettings {
     final int nextChanceSongCount =
         (json['nextChanceSongCount'] as num?)?.toInt().clamp(0, 5) ?? 1;
     final int preloadNextSongCount =
-        (json['preloadNextSongCount'] as num?)?.toInt().clamp(0, 5) ?? 1;
+        (json['preloadNextSongCount'] as num?)?.toInt().clamp(0, 3) ?? 1;
     return AppSettings(
       denseLibrary: json['denseLibrary'] as bool? ?? false,
       useGridView: json['useGridView'] as bool? ?? true,
@@ -450,16 +450,19 @@ class LibrarySong {
   }
 
   factory LibrarySong.fromJson(Map<String, dynamic> json) {
+    final String album = json['album'] as String? ?? 'Unknown album';
+    final String folderName = json['folderName'] as String? ?? 'Library';
+    final String sourceLabel = json['sourceLabel'] as String? ?? 'Library';
     return LibrarySong(
       id: json['id'] as String,
       path: json['path'] as String,
       title: json['title'] as String,
       artist: json['artist'] as String? ?? 'Unknown artist',
-      album: json['album'] as String? ?? 'Unknown album',
+      album: _neutralRemoteLabel(album),
       albumArtist: json['albumArtist'] as String? ?? 'Unknown artist',
-      folderName: json['folderName'] as String? ?? 'Library',
+      folderName: _neutralRemoteLabel(folderName),
       folderPath: json['folderPath'] as String? ?? '',
-      sourceLabel: json['sourceLabel'] as String? ?? 'Library',
+      sourceLabel: _neutralRemoteLabel(sourceLabel),
       addedAt:
           DateTime.tryParse(json['addedAt'] as String? ?? '') ?? DateTime.now(),
       durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
@@ -482,6 +485,17 @@ class LibrarySong {
 
 const Object _copyWithSentinel = Object();
 
+String _neutralRemoteLabel(String value) {
+  final String normalized = value.trim().toLowerCase();
+  if (normalized == 'youtube music') {
+    return 'Online Music';
+  }
+  if (normalized == 'youtube') {
+    return 'Online Stream';
+  }
+  return value;
+}
+
 class UserPlaylist {
   const UserPlaylist({
     required this.id,
@@ -491,6 +505,7 @@ class UserPlaylist {
     required this.updatedAt,
     this.songCount,
     this.songIdsComplete = true,
+    this.lastSyncedAt,
   });
 
   final String id;
@@ -500,6 +515,7 @@ class UserPlaylist {
   final DateTime updatedAt;
   final int? songCount;
   final bool songIdsComplete;
+  final DateTime? lastSyncedAt;
 
   int get displaySongCount => songCount ?? songIds.length;
 
@@ -510,6 +526,7 @@ class UserPlaylist {
     DateTime? updatedAt,
     int? songCount,
     bool? songIdsComplete,
+    Object? lastSyncedAt = _copyWithSentinel,
   }) {
     return UserPlaylist(
       id: id,
@@ -519,6 +536,9 @@ class UserPlaylist {
       updatedAt: updatedAt ?? this.updatedAt,
       songCount: songCount ?? this.songCount,
       songIdsComplete: songIdsComplete ?? this.songIdsComplete,
+      lastSyncedAt: lastSyncedAt == _copyWithSentinel
+          ? this.lastSyncedAt
+          : lastSyncedAt as DateTime?,
     );
   }
 
@@ -531,6 +551,7 @@ class UserPlaylist {
       'songIdsComplete': songIdsComplete,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'lastSyncedAt': lastSyncedAt?.toIso8601String(),
     };
   }
 
@@ -549,6 +570,7 @@ class UserPlaylist {
       updatedAt:
           DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
           DateTime.now(),
+      lastSyncedAt: DateTime.tryParse(json['lastSyncedAt'] as String? ?? ''),
     );
   }
 }

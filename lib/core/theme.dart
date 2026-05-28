@@ -154,7 +154,7 @@ ThemeData buildMusixTheme() {
 
 ButtonStyle musixDialogPrimaryButtonStyle({Color? backgroundColor}) {
   return FilledButton.styleFrom(
-    backgroundColor: backgroundColor ?? MusixColors.accentStrong,
+    backgroundColor: backgroundColor ?? MusixColors.accent,
     foregroundColor: Colors.white,
     disabledBackgroundColor: MusixColors.accentStrong.withValues(alpha: 0.34),
     disabledForegroundColor: Colors.white.withValues(alpha: 0.65),

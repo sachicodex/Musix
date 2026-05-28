@@ -157,7 +157,7 @@ PlaybackStreamResolution resolvePlaybackStreamAtIndex({
   }).length;
 
   if (rankedCandidates.isEmpty) {
-    throw const FormatException('No playable YouTube stream found.');
+    throw const FormatException('No playable online stream found.');
   }
   final int safeSelectedIndex = selectedIndex.clamp(
     0,
