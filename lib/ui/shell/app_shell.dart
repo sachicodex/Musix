@@ -3,6 +3,9 @@ part of '../musix_ui.dart';
 final GlobalKey<ScaffoldMessengerState> _musixScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 int _musixSnackBarRequestSerial = 0;
+OverlayEntry? _musixSnackBarOverlayEntry;
+Completer<SnackBarClosedReason>? _musixSnackBarOverlayCompleter;
+Timer? _musixSnackBarOverlayTimer;
 
 class MusixApp extends StatelessWidget {
   const MusixApp({super.key, required this.home});
@@ -1141,7 +1144,7 @@ BoxDecoration _musixPageDecoration() {
 ScaffoldMessengerState? _musixRootMessenger([
   ScaffoldMessengerState? fallback,
 ]) {
-  return _musixScaffoldMessengerKey.currentState ?? fallback;
+  return fallback ?? _musixScaffoldMessengerKey.currentState;
 }
 
 Future<T?> _runWithRootMessenger<T>(
@@ -1173,6 +1176,170 @@ Future<T?> _runWithRootMessenger<T>(
   return completer.future;
 }
 
+BuildContext? _musixSnackBarOverlayContext(BuildContext? preferredContext) {
+  if (preferredContext != null &&
+      Overlay.maybeOf(preferredContext, rootOverlay: true) != null) {
+    return preferredContext;
+  }
+  final BuildContext? messengerContext =
+      _musixScaffoldMessengerKey.currentContext;
+  if (messengerContext != null &&
+      Overlay.maybeOf(messengerContext, rootOverlay: true) != null) {
+    return messengerContext;
+  }
+  return null;
+}
+
+void _hideMusixOverlaySnackBar(SnackBarClosedReason reason) {
+  _musixSnackBarOverlayTimer?.cancel();
+  _musixSnackBarOverlayTimer = null;
+  _musixSnackBarOverlayEntry?.remove();
+  _musixSnackBarOverlayEntry = null;
+  final Completer<SnackBarClosedReason>? completer =
+      _musixSnackBarOverlayCompleter;
+  _musixSnackBarOverlayCompleter = null;
+  if (completer != null && !completer.isCompleted) {
+    completer.complete(reason);
+  }
+}
+
+Future<SnackBarClosedReason?> _showMusixOverlaySnackBar(
+  BuildContext context, {
+  required String message,
+  required Color backgroundColor,
+  TextStyle? textStyle,
+  ShapeBorder? shape,
+  String? actionLabel,
+  Duration duration = const Duration(seconds: 4),
+}) {
+  final BuildContext? overlayContext = _musixSnackBarOverlayContext(context);
+  if (overlayContext == null) {
+    return SynchronousFuture<SnackBarClosedReason?>(null);
+  }
+
+  final OverlayState? overlay = Overlay.maybeOf(
+    overlayContext,
+    rootOverlay: true,
+  );
+  if (overlay == null) {
+    return SynchronousFuture<SnackBarClosedReason?>(null);
+  }
+
+  _hideMusixOverlaySnackBar(SnackBarClosedReason.hide);
+  final Completer<SnackBarClosedReason> completer =
+      Completer<SnackBarClosedReason>();
+  _musixSnackBarOverlayCompleter = completer;
+  final double bottomOffset = _musixSnackBarBottomOffset(context);
+
+  _musixSnackBarOverlayEntry = OverlayEntry(
+    builder: (BuildContext context) {
+      return Positioned(
+        left: 20,
+        right: 20,
+        bottom: bottomOffset,
+        child: SafeArea(
+          top: false,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Material(
+                color: backgroundColor,
+                elevation: 8,
+                shadowColor: Colors.black.withValues(alpha: 0.35),
+                shape:
+                    shape ??
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                clipBehavior: Clip.antiAlias,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    14,
+                    actionLabel == null ? 16 : 8,
+                    14,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          message,
+                          style: textStyle,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (actionLabel != null) ...<Widget>[
+                        const SizedBox(width: 12),
+                        TextButton(
+                          onPressed: () => _hideMusixOverlaySnackBar(
+                            SnackBarClosedReason.action,
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: _kAccent,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(
+                            actionLabel,
+                            style: _musixBodyTextStyle(
+                              color: _kAccent,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+  overlay.insert(_musixSnackBarOverlayEntry!);
+  _musixSnackBarOverlayTimer = Timer(
+    duration,
+    () => _hideMusixOverlaySnackBar(SnackBarClosedReason.timeout),
+  );
+  return completer.future;
+}
+
+double _musixSnackBarBottomOffset(BuildContext context) {
+  final EdgeInsets viewInsets = MediaQuery.viewInsetsOf(context);
+  if (!Platform.isAndroid || MediaQuery.sizeOf(context).width >= 960) {
+    return 20 + viewInsets.bottom;
+  }
+
+  bool hasMiniPlayer = false;
+  try {
+    hasMiniPlayer =
+        Provider.of<MusixController>(context, listen: false).miniPlayerSong !=
+        null;
+  } catch (_) {
+    hasMiniPlayer = false;
+  }
+
+  final bool onSubscreen =
+      context.findAncestorWidgetOfExactType<_MusixSubscreenScaffold>() != null;
+  final bool onFullPlayer =
+      context.findAncestorWidgetOfExactType<_PlayerScreen>() != null;
+  final bool usesRootBottomChrome = !onSubscreen && !onFullPlayer;
+
+  return 20 +
+      viewInsets.bottom +
+      (usesRootBottomChrome ? _kMobileBottomNavHeight : 0) +
+      (hasMiniPlayer && !onFullPlayer ? _kMiniPlayerReservedHeight : 0);
+}
+
 void _showMusixSnackBar(BuildContext context, String message) {
   _showMusixStatusSnackBar(
     context,
@@ -1200,28 +1367,59 @@ void _showMusixStatusSnackBar(
 }) {
   final int requestSerial = ++_musixSnackBarRequestSerial;
   final ScaffoldMessengerState fallback = ScaffoldMessenger.of(context);
-  unawaited(
-    _runWithRootMessenger<void>(
-      (ScaffoldMessengerState messenger) async {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (requestSerial != _musixSnackBarRequestSerial) {
+      return;
+    }
+    final BuildContext? snackBarContext = context.mounted
+        ? context
+        : _musixScaffoldMessengerKey.currentContext;
+    if (snackBarContext == null) {
+      return;
+    }
+    final BuildContext? overlayContext = _musixSnackBarOverlayContext(
+      snackBarContext,
+    );
+    if (overlayContext != null) {
+      unawaited(
+        _showMusixOverlaySnackBar(
+          snackBarContext,
+          message: message,
+          backgroundColor: backgroundColor,
+          textStyle: textStyle,
+          shape: shape,
+        ),
+      );
+      return;
+    }
+    unawaited(
+      _runWithRootMessenger<void>((ScaffoldMessengerState messenger) async {
         if (requestSerial != _musixSnackBarRequestSerial) {
           return;
         }
+        final BuildContext marginContext = snackBarContext.mounted
+            ? snackBarContext
+            : messenger.context;
         messenger.removeCurrentSnackBar();
         messenger.showSnackBar(
           SnackBar(
             backgroundColor: backgroundColor,
             behavior: behavior,
+            margin: Platform.isAndroid && behavior == SnackBarBehavior.floating
+                ? EdgeInsets.fromLTRB(
+                    20,
+                    0,
+                    20,
+                    _musixSnackBarBottomOffset(marginContext),
+                  )
+                : null,
             shape: shape,
-            content: Text(
-              message,
-              style: textStyle,
-            ),
+            content: Text(message, style: textStyle),
           ),
         );
-      },
-      fallback: fallback,
-    ),
-  );
+      }, fallback: fallback),
+    );
+  });
 }
 
 class _MusixLoader extends StatelessWidget {
@@ -1253,44 +1451,72 @@ class _MusixLoader extends StatelessWidget {
 Future<bool> _showMusixUndoSnackBarWithMessenger(
   ScaffoldMessengerState messenger,
   String message, {
+  BuildContext? context,
   String actionLabel = 'Undo',
   Duration duration = const Duration(seconds: 5),
 }) async {
+  final BuildContext? overlayContext = _musixSnackBarOverlayContext(
+    context ?? messenger.context,
+  );
+  if (overlayContext != null) {
+    final SnackBarClosedReason? reason = await _showMusixOverlaySnackBar(
+      context ?? messenger.context,
+      message: message,
+      backgroundColor: _kSurface,
+      textStyle: _musixBodyTextStyle(
+        color: _kTextPrimary,
+        fontWeight: FontWeight.w600,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: _kSurfaceEdge),
+      ),
+      actionLabel: actionLabel,
+      duration: duration,
+    );
+    return reason == SnackBarClosedReason.action;
+  }
+
   final SnackBarClosedReason? reason =
-      await _runWithRootMessenger<SnackBarClosedReason>(
-        (ScaffoldMessengerState resolvedMessenger) async {
-          resolvedMessenger.removeCurrentSnackBar();
-          final ScaffoldFeatureController<
-            SnackBar,
-            SnackBarClosedReason
-          > controller = resolvedMessenger.showSnackBar(
-            SnackBar(
-              persist: false,
-              duration: duration,
-              backgroundColor: _kSurface,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: _kSurfaceEdge),
-              ),
-              content: Text(
-                message,
-                style: _musixBodyTextStyle(
-                  color: _kTextPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              action: SnackBarAction(
-                label: actionLabel,
-                textColor: _kAccent,
-                onPressed: () {},
+      await _runWithRootMessenger<SnackBarClosedReason>((
+        ScaffoldMessengerState resolvedMessenger,
+      ) async {
+        resolvedMessenger.removeCurrentSnackBar();
+        final ScaffoldFeatureController<SnackBar, SnackBarClosedReason>
+        controller = resolvedMessenger.showSnackBar(
+          SnackBar(
+            persist: false,
+            duration: duration,
+            backgroundColor: _kSurface,
+            behavior: SnackBarBehavior.floating,
+            margin: Platform.isAndroid
+                ? EdgeInsets.fromLTRB(
+                    20,
+                    0,
+                    20,
+                    _musixSnackBarBottomOffset(context ?? messenger.context),
+                  )
+                : null,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: _kSurfaceEdge),
+            ),
+            content: Text(
+              message,
+              style: _musixBodyTextStyle(
+                color: _kTextPrimary,
+                fontWeight: FontWeight.w600,
               ),
             ),
-          );
-          return controller.closed;
-        },
-        fallback: messenger,
-      );
+            action: SnackBarAction(
+              label: actionLabel,
+              textColor: _kAccent,
+              onPressed: () {},
+            ),
+          ),
+        );
+        return controller.closed;
+      }, fallback: messenger);
   return reason == SnackBarClosedReason.action;
 }
 

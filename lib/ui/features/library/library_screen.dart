@@ -116,10 +116,16 @@ class _LibraryScreenState extends State<_LibraryScreen>
                             subtitle: hasDownloads
                                 ? '${downloadedSongs.length} songs ready'
                                 : 'Save music',
-                            icon: Icons.downloading_outlined,
+                            icon: Platform.isAndroid
+                                ? null
+                                : Icons.downloading_outlined,
                             accent: const Color(0xFFFF8C43),
                             secondary: const Color(0xFFCC5A18),
                             watermark: Icons.download_for_offline_rounded,
+                            showArtwork: true,
+                            watermarkAlignment: Platform.isAndroid
+                                ? Alignment.topCenter
+                                : null,
                             iconBackgroundColor: Colors.white.withValues(
                               alpha: 0.15,
                             ),
@@ -146,10 +152,16 @@ class _LibraryScreenState extends State<_LibraryScreen>
                             subtitle: controller.supportsLocalFileImport
                                 ? 'Import or browse'
                                 : 'Ready anytime',
-                            icon: CupertinoIcons.folder_solid,
+                            icon: Platform.isAndroid
+                                ? null
+                                : CupertinoIcons.folder_solid,
                             accent: const Color(0xFF4A1D06),
                             secondary: const Color(0xFF512007),
                             watermark: Icons.folder,
+                            showArtwork: true,
+                            watermarkAlignment: Platform.isAndroid
+                                ? Alignment.topCenter
+                                : null,
                             darkText: false,
                             iconColor: Colors.white.withValues(alpha: 0.7),
                             onTap: () {

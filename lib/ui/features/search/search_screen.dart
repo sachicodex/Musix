@@ -272,22 +272,19 @@ class _SearchTrendingTile extends StatelessWidget {
     if (!canQueue) {
       return tile;
     }
-    return Dismissible(
-      key: ValueKey<String>('search-song-${song.id}-$rank'),
-      direction: DismissDirection.startToEnd,
+    return _BoundedQueueSwipeTile(
       background: const _SwipeActionBackground(
         alignment: Alignment.centerLeft,
         color: Color(0xFF18432B),
         icon: Icons.queue_music_rounded,
         label: 'Queue',
       ),
-      confirmDismiss: (DismissDirection direction) async {
+      onQueue: () async {
         await HapticFeedback.selectionClick();
         await controller.enqueueSong(song);
         if (context.mounted) {
           _showMusixSnackBar(context, 'Added to queue');
         }
-        return false;
       },
       child: tile,
     );
@@ -728,7 +725,7 @@ class _SearchScreenState extends State<_SearchScreen>
                       ),
                     ),
                     const SizedBox(height: 34),
-                    const _SearchSectionTitle('Trending Now'),
+                    const _SearchSectionTitle('Regional Trends'),
                     const SizedBox(height: 18),
                     RepaintBoundary(
                       child: Column(

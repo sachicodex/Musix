@@ -188,7 +188,7 @@ class _DesktopSearchScreen extends StatelessWidget {
                     children: <Widget>[
                       const _DesktopPanelTitle(
                         eyebrow: 'TRENDING',
-                        title: 'Regional chart pulse',
+                        title: 'Regional Trends',
                       ),
                       const SizedBox(height: 18),
                       if (monthlyTrendingSongs.isEmpty &&

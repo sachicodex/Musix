@@ -5680,9 +5680,6 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
 
   List<_RecommendationQuery> _buildHomeQueries(LibrarySong? seedSong) {
     final List<_TasteSignal> artists = _preferenceArtists();
-    final List<_TasteSignal> genres = _preferenceGenres();
-    final List<_LanguageSignal> languages =
-        _preferredLanguagesFromValidHistory();
     final _TasteProfile profile = _buildTasteProfile();
     final _SessionContext session = _sessionContext();
     final List<_RecommendationQuery> queries = <_RecommendationQuery>[];
@@ -5713,14 +5710,6 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
           anchor: seedSong,
         ),
       );
-      addQuery(
-        _RecommendationQuery(
-          title: 'More from ${seedSong.artist}',
-          subtitle: 'Artists and songs adjacent to your recent play',
-          query: '${seedSong.artist} popular songs',
-          anchor: seedSong,
-        ),
-      );
     }
 
     for (final _TasteSignal artist in artists.take(2)) {
@@ -5733,38 +5722,6 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
 
-    for (final _TasteSignal genre in genres.take(2)) {
-      addQuery(
-        _RecommendationQuery(
-          title: '${genre.label} for you',
-          subtitle: 'Genre picks driven by your listening patterns',
-          query: '$languageToken ${genre.label} songs',
-        ),
-      );
-    }
-
-    for (final _LanguageSignal language in languages.take(1)) {
-      addQuery(
-        _RecommendationQuery(
-          title: '${language.label} picks',
-          subtitle: 'Matches the language you finish most',
-          query: '${language.queryToken} songs you may like',
-        ),
-      );
-    }
-
-    final String topYear = profile.yearKeys.firstOrNull ?? '';
-    if (topYear.isNotEmpty) {
-      addQuery(
-        _RecommendationQuery(
-          title: '$topYear favorites',
-          subtitle: 'Release years that fit your listening pattern',
-          query: '$languageToken $topYear songs',
-          anchor: seedSong,
-        ),
-      );
-    }
-
     addQuery(
       _RecommendationQuery(
         title: '${session.label} for you',
@@ -5773,25 +5730,6 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         anchor: seedSong,
       ),
     );
-
-    if (queries.isEmpty) {
-      addQuery(
-        _RecommendationQuery(
-          title: 'Fresh discoveries',
-          subtitle:
-              'Start listening, liking, and finishing songs to personalize this section',
-          query: '$languageToken best songs playlist',
-        ),
-      );
-      addQuery(
-        _RecommendationQuery(
-          title: 'New for your library',
-          subtitle:
-              'A fallback shelf until your taste profile becomes stronger',
-          query: '$languageToken new music songs',
-        ),
-      );
-    }
 
     return queries;
   }
@@ -7559,33 +7497,6 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         continue;
       }
       labels[key] ??= song.artist;
-      scores[key] = (scores[key] ?? 0) + _songPreferenceWeight(song);
-    }
-
-    return scores.entries
-        .map(
-          (MapEntry<String, double> entry) =>
-              _TasteSignal(labels[entry.key] ?? entry.key, entry.value),
-        )
-        .toList()
-      ..sort((_TasteSignal a, _TasteSignal b) => b.score.compareTo(a.score));
-  }
-
-  List<_TasteSignal> _preferenceGenres() {
-    final Map<String, double> scores = Map<String, double>.from(
-      _cloudPreferenceProfile.genreScores,
-    );
-    final Map<String, String> labels = <String, String>{
-      for (final String key in _cloudPreferenceProfile.genreKeys) key: key,
-    };
-
-    for (final LibrarySong song in _rankedPreferenceSongs()) {
-      final String rawGenre = song.genre?.trim() ?? '';
-      if (rawGenre.isEmpty) {
-        continue;
-      }
-      final String key = _normalizeToken(rawGenre);
-      labels[key] ??= rawGenre;
       scores[key] = (scores[key] ?? 0) + _songPreferenceWeight(song);
     }
 

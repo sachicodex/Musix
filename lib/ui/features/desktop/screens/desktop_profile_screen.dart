@@ -31,7 +31,7 @@ class _DesktopProfileScreen extends StatelessWidget {
             info: currentStreamInfo,
             fallbackLabel: currentStreamInfo.bitrateLabel,
           )
-        : 'No active stream';
+        : 'Idle';
 
     Future<void> signOutUser() async {
       try {
@@ -59,7 +59,7 @@ class _DesktopProfileScreen extends StatelessWidget {
       final int? selected = await _showSettingsSelectionSheet<int, int>(
         context: context,
         title: 'Next song preload',
-        description: 'Keep upcoming songs ready so playback starts faster.',
+        description: 'Keep upcoming songs ready for smoother playback',
         selectedValue: preloadNextSongCount,
         items: preloadOptions,
         valueOf: (int value) => value,
@@ -81,8 +81,7 @@ class _DesktopProfileScreen extends StatelessWidget {
       final int? selected = await _showSettingsSelectionSheet<int, int>(
         context: context,
         title: 'Sleep timer',
-        description:
-            'Stops playback after the selected inactive time. The countdown only runs while music is playing and turns off when the app is reopened.',
+        description: 'Music stops automatically after the timer ends',
         selectedValue: controller.sleepTimerMinutes,
         items: sleepTimerOptions,
         valueOf: (int value) => value,
@@ -97,8 +96,7 @@ class _DesktopProfileScreen extends StatelessWidget {
         },
         subtitleOf: (int value) => switch (value) {
           0 => 'Disable the inactivity sleep timer',
-          _ =>
-            'Monitors gestures and controls, and starts counting when playback starts',
+          _ => 'Music stops automatically after the timer ends',
         },
       );
       if (selected == null) {
@@ -200,7 +198,7 @@ class _DesktopProfileScreen extends StatelessWidget {
                         _DesktopSettingsActionRow(
                           title: 'Next Song Preload',
                           subtitle:
-                              'Off, or keep the next 1 to 5 songs ready to play',
+                              'Keep upcoming songs ready for smoother playback',
                           trailing: GestureDetector(
                             onTap: pickPreloadCount,
                             child: Text(
@@ -224,7 +222,7 @@ class _DesktopProfileScreen extends StatelessWidget {
                         _DesktopSettingsActionRow(
                           title: 'Sleep Timer',
                           subtitle:
-                              'Monitors gestures and controls, and starts counting when playback starts',
+                              'Music stops automatically after the timer ends',
                           trailing: GestureDetector(
                             onTap: pickSleepTimer,
                             child: Text(
@@ -246,9 +244,9 @@ class _DesktopProfileScreen extends StatelessWidget {
                           height: 24,
                         ),
                         _DesktopSettingsActionRow(
-                          title: 'Current Stream Source Size',
+                          title: 'Data Usage',
                           subtitle: currentStreamSong == null
-                              ? 'Play a song to inspect the active source size.'
+                              ? 'Displays the size of the current audio stream'
                               : currentStreamSong.title,
                           trailing: Text(
                             currentStreamSizeLabel,
@@ -282,12 +280,12 @@ class _DesktopProfileScreen extends StatelessWidget {
                         Row(
                           children: <Widget>[
                             const Icon(
-                              Icons.public_rounded,
+                              Icons.auto_awesome_rounded,
                               color: MusixColors.textMuted,
                             ),
                             const SizedBox(width: 10),
                             Text(
-                              'Discovery Region',
+                              'Personalization',
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(
                                     color: _kTextPrimary,
@@ -299,8 +297,7 @@ class _DesktopProfileScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         _DesktopSettingsActionRow(
                           title: 'Region',
-                          subtitle:
-                              'Controls Trending Now and regional chart shelves',
+                          subtitle: 'Personalize trending music by region',
                           onTap: onPickRegion,
                           trailing: Text(
                             controller.preferredRegionLabel,
@@ -328,7 +325,7 @@ class _DesktopProfileScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
-                          'Agenix 4.3.17',
+                          'Musix 4.3.17',
                           style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(
                                 color: MusixColors.textMuted,

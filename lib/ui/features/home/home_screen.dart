@@ -421,7 +421,6 @@ class _HomeScreenState extends State<_HomeScreen>
                   else
                     _ProgressiveListReveal(
                       itemCount: mayYouLike.length,
-                      animateItems: false,
                       showTrailingPlaceholders: true,
                       itemBuilder: (BuildContext context, int index) {
                         final LibrarySong song = mayYouLike[index];
@@ -709,7 +708,6 @@ Widget _buildHomeShelf({
       const SizedBox(height: 8),
       _ProgressiveListReveal(
         itemCount: songs.length,
-        animateItems: false,
         showTrailingPlaceholders: true,
         itemBuilder: (BuildContext context, int index) {
           final LibrarySong song = songs[index];
@@ -745,6 +743,9 @@ List<HomeFeedSection> _filteredHomeFeedSections(
         if (key == 'trending now' || key == 'chill rotation') {
           return false;
         }
+        if (_isRemovedHomeShelfTitle(key)) {
+          return false;
+        }
         if (key.startsWith('because you finished')) {
           return false;
         }
@@ -758,6 +759,35 @@ List<HomeFeedSection> _filteredHomeFeedSections(
       })
       .toList(growable: false);
 }
+
+bool _isRemovedHomeShelfTitle(String key) {
+  if (key == 'fresh discoveries' || key == 'new for your library') {
+    return true;
+  }
+  if (key.startsWith('more from ')) {
+    return true;
+  }
+  if (RegExp(r'^\d{4} favorites$').hasMatch(key)) {
+    return true;
+  }
+  if (key.endsWith(' picks')) {
+    return true;
+  }
+  if (key.endsWith(' for you') &&
+      !_allowedSessionHomeShelfTitles.contains(key)) {
+    return true;
+  }
+  return false;
+}
+
+const Set<String> _allowedSessionHomeShelfTitles = <String>{
+  'late night for you',
+  'morning for you',
+  'daytime for you',
+  'evening for you',
+  'weekend evening for you',
+  'night for you',
+};
 
 bool _isQuickPickSection(HomeFeedSection section) {
   return section.title.trim().toLowerCase().startsWith('inspired by ');
@@ -2395,22 +2425,19 @@ class _MusixPopularTrackTile extends StatelessWidget {
     if (!enableQueueSwipe) {
       return tile;
     }
-    return Dismissible(
-      key: ValueKey<String>('popular-track-${song.id}-$index'),
-      direction: DismissDirection.startToEnd,
+    return _BoundedQueueSwipeTile(
       background: const _SwipeActionBackground(
         alignment: Alignment.centerLeft,
         color: Color(0xFF18432B),
         icon: Icons.queue_music_rounded,
         label: 'Queue',
       ),
-      confirmDismiss: (DismissDirection direction) async {
+      onQueue: () async {
         await HapticFeedback.selectionClick();
         await controller.enqueueSong(song);
         if (context.mounted) {
           _showMusixSnackBar(context, 'Added to queue');
         }
-        return false;
       },
       child: tile,
     );
@@ -2825,37 +2852,19 @@ class _MusixSubscreenHeader extends StatelessWidget {
 }
 
 class _MusixHeaderActionButton extends StatelessWidget {
-  const _MusixHeaderActionButton({
-    required this.icon,
-    required this.onPressed,
-    this.primary = false,
-    this.destructive = false,
-  });
+  const _MusixHeaderActionButton({required this.icon, required this.onPressed});
 
   final IconData icon;
   final VoidCallback? onPressed;
-  final bool primary;
-  final bool destructive;
 
   @override
   Widget build(BuildContext context) {
     final bool enabled = onPressed != null;
-    final Color accent = destructive
-        ? const Color(0xFFFF8D74)
-        : const Color(0xFFFF8A2A);
-    final Color fill = enabled
-        ? primary
-              ? accent.withValues(alpha: 0.20)
-              : const Color(0xFF25110B).withValues(alpha: 0.84)
-        : const Color(0xFF25110B).withValues(alpha: 0.36);
-    final Color border = enabled
-        ? primary
-              ? accent.withValues(alpha: 0.46)
-              : accent.withValues(alpha: destructive ? 0.32 : 0.22)
-        : Colors.white.withValues(alpha: 0.07);
-    final Color iconColor = enabled
-        ? accent
-        : const Color(0xFFC89373).withValues(alpha: 0.48);
+    final Color fill = Colors.white.withValues(alpha: enabled ? 0.06 : 0.035);
+    final Color border = Colors.white.withValues(alpha: enabled ? 0.10 : 0.06);
+    final Color iconColor = Colors.white.withValues(
+      alpha: enabled ? 1.0 : 0.36,
+    );
 
     return Semantics(
       button: true,
@@ -2866,16 +2875,16 @@ class _MusixHeaderActionButton extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onPressed,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             child: Ink(
-              width: 38,
-              height: 38,
+              width: 34,
+              height: 34,
               decoration: BoxDecoration(
                 color: fill,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: border),
               ),
-              child: Icon(icon, color: iconColor, size: 20),
+              child: Icon(icon, color: iconColor, size: 18),
             ),
           ),
         ),
@@ -2986,13 +2995,11 @@ class _ProgressiveListReveal extends StatefulWidget {
   const _ProgressiveListReveal({
     required this.itemCount,
     required this.itemBuilder,
-    this.animateItems = true,
     this.showTrailingPlaceholders = false,
   });
 
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
-  final bool animateItems;
   final bool showTrailingPlaceholders;
 
   @override
@@ -3035,15 +3042,6 @@ class _ProgressiveListRevealState extends State<_ProgressiveListReveal> {
   }) {
     _timer?.cancel();
     if (!mounted) {
-      return;
-    }
-
-    if (!widget.animateItems) {
-      final bool needsUpdate = _visibleCount != widget.itemCount;
-      _visibleCount = widget.itemCount;
-      if (allowImmediateSetState && needsUpdate) {
-        setState(() {});
-      }
       return;
     }
 

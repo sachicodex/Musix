@@ -663,6 +663,9 @@ class _PlayerHeaderOverflowMenu extends StatelessWidget {
       builder: (BuildContext context, _) {
         final bool isDownloaded = controller.isSongDownloaded(song);
         final bool isDownloading = controller.isSongDownloading(song.id);
+        final IconData moreIcon = Platform.isAndroid
+            ? Icons.more_vert_rounded
+            : Icons.more_horiz_rounded;
         return PopupMenuButton<_PlayerHeaderMenuAction>(
           tooltip: '',
           color: const Color(0xFF25110B),
@@ -723,7 +726,7 @@ class _PlayerHeaderOverflowMenu extends StatelessWidget {
               ],
           child: IgnorePointer(
             child: _PlayerHeaderActionButton(
-              icon: Icons.more_horiz_rounded,
+              icon: moreIcon,
               semanticLabel: isDownloading
                   ? 'Downloading song'
                   : 'More actions',
@@ -740,7 +743,7 @@ class _PlayerHeaderOverflowMenu extends StatelessWidget {
                         strokeWidth: 2.2,
                       ),
                     )
-                  : Icon(Icons.more_horiz_rounded, color: color, size: 22),
+                  : Icon(moreIcon, color: color, size: 22),
             ),
           ),
         );
@@ -2190,6 +2193,7 @@ class _PlayerQueueSheetState extends State<_PlayerQueueSheet> {
                                           );
                                           await _removeQueueSongWithUndo(
                                             messenger,
+                                            context: context,
                                             controller: controller,
                                             song: song,
                                             queueIndex: queueItem.queueIndex,
@@ -2581,7 +2585,6 @@ class _MusixArtistScreenState extends State<_MusixArtistScreen> {
       actions: <Widget>[
         _MusixHeaderActionButton(
           icon: Icons.play_arrow_rounded,
-          primary: true,
           onPressed: _resolvedArtist == null || _songs.isEmpty
               ? null
               : () => widget.controller.playArtist(_resolvedArtist!),
@@ -2762,6 +2765,34 @@ class _MusixPlaylistScreenState extends State<_MusixPlaylistScreen> {
     }
   }
 
+  Future<void> _deletePlaylistWithUndo(UserPlaylist playlist) async {
+    final int playlistIndex = widget.controller.playlists.indexWhere(
+      (UserPlaylist item) => item.id == playlist.id,
+    );
+    final UserPlaylist? removed = await widget.controller.removePlaylistLocally(
+      playlist.id,
+    );
+    if (removed == null || !mounted) {
+      return;
+    }
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final Future<bool> undoFuture = _showMusixUndoSnackBarWithMessenger(
+      messenger,
+      'Playlist deleted',
+      context: context,
+    );
+    Navigator.of(context).pop();
+    final bool undone = await undoFuture;
+    if (undone) {
+      await widget.controller.restorePlaylist(
+        removed,
+        index: playlistIndex < 0 ? null : playlistIndex,
+      );
+      return;
+    }
+    await widget.controller.finalizeDeletedPlaylist(removed.id);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -2793,55 +2824,14 @@ class _MusixPlaylistScreenState extends State<_MusixPlaylistScreen> {
                     ? null
                     : () => widget.controller.importFolder(),
               ),
-            if (widget.showLocalImportActions &&
-                widget.controller.supportsLocalFileImport)
-              _MusixHeaderActionButton(
-                icon: Icons.audio_file_outlined,
-                onPressed: widget.controller.scanning
-                    ? null
-                    : () => widget.controller.importFiles(),
-              ),
             if (playlist != null)
-              _MusixHeaderActionButton(
-                icon: Icons.edit_outlined,
-                onPressed: () => _showRenamePlaylistDialog(
+              _PlaylistHeaderMenuButton(
+                onEdit: () => _showRenamePlaylistDialog(
                   context,
                   widget.controller,
                   playlist,
                 ),
-              ),
-            if (playlist != null)
-              _MusixHeaderActionButton(
-                icon: Icons.delete_outline_rounded,
-                destructive: true,
-                onPressed: () async {
-                  final int playlistIndex = widget.controller.playlists
-                      .indexWhere(
-                        (UserPlaylist item) => item.id == playlist.id,
-                      );
-                  final UserPlaylist? removed = await widget.controller
-                      .removePlaylistLocally(playlist.id);
-                  if (removed == null || !context.mounted) {
-                    return;
-                  }
-                  final ScaffoldMessengerState messenger = ScaffoldMessenger.of(
-                    context,
-                  );
-                  Navigator.of(context).pop();
-                  await WidgetsBinding.instance.endOfFrame;
-                  final bool undone = await _showMusixUndoSnackBarWithMessenger(
-                    messenger,
-                    'Playlist deleted',
-                  );
-                  if (undone) {
-                    await widget.controller.restorePlaylist(
-                      removed,
-                      index: playlistIndex < 0 ? null : playlistIndex,
-                    );
-                    return;
-                  }
-                  await widget.controller.finalizeDeletedPlaylist(removed.id);
-                },
+                onDelete: () => _deletePlaylistWithUndo(playlist),
               ),
           ],
           child: Column(
@@ -2901,6 +2891,96 @@ class _MusixPlaylistScreenState extends State<_MusixPlaylistScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+enum _PlaylistHeaderMenuAction { edit, delete }
+
+class _PlaylistHeaderMenuButton extends StatelessWidget {
+  const _PlaylistHeaderMenuButton({
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_PlaylistHeaderMenuAction>(
+      tooltip: '',
+      color: const Color(0xFF25110B),
+      surfaceTintColor: Colors.transparent,
+      shadowColor: Colors.black.withValues(alpha: 0.32),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: _kAccent.withValues(alpha: 0.24)),
+      ),
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 8),
+      popUpAnimationStyle: AnimationStyle.noAnimation,
+      onSelected: (_PlaylistHeaderMenuAction action) {
+        switch (action) {
+          case _PlaylistHeaderMenuAction.edit:
+            onEdit();
+          case _PlaylistHeaderMenuAction.delete:
+            onDelete();
+        }
+      },
+      itemBuilder: (BuildContext context) =>
+          <PopupMenuEntry<_PlaylistHeaderMenuAction>>[
+            const PopupMenuItem<_PlaylistHeaderMenuAction>(
+              value: _PlaylistHeaderMenuAction.edit,
+              child: _PlaylistHeaderMenuItem(
+                icon: Icons.edit_outlined,
+                label: 'Edit',
+              ),
+            ),
+            const PopupMenuItem<_PlaylistHeaderMenuAction>(
+              value: _PlaylistHeaderMenuAction.delete,
+              child: _PlaylistHeaderMenuItem(
+                icon: Icons.delete_outline_rounded,
+                label: 'Delete',
+                destructive: true,
+              ),
+            ),
+          ],
+      child: IgnorePointer(
+        child: _MusixHeaderActionButton(
+          icon: Icons.more_vert_rounded,
+          onPressed: () {},
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaylistHeaderMenuItem extends StatelessWidget {
+  const _PlaylistHeaderMenuItem({
+    required this.icon,
+    required this.label,
+    this.destructive = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = destructive
+        ? const Color(0xFFFF8D74)
+        : const Color(0xFFFFDFC9);
+    return Row(
+      children: <Widget>[
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: _musixBodyTextStyle(color: color, fontWeight: FontWeight.w600),
+        ),
+      ],
     );
   }
 }
@@ -3026,24 +3106,28 @@ class _LibraryFeatureCard extends StatelessWidget {
   const _LibraryFeatureCard({
     required this.title,
     required this.subtitle,
-    required this.icon,
     required this.accent,
     required this.secondary,
     required this.watermark,
     required this.onTap,
+    this.icon,
     this.darkText = true,
+    this.showArtwork = true,
+    this.watermarkAlignment,
     this.iconBackgroundColor,
     this.iconColor,
   });
 
   final String title;
   final String subtitle;
-  final IconData icon;
+  final IconData? icon;
   final Color accent;
   final Color secondary;
   final IconData watermark;
   final VoidCallback onTap;
   final bool darkText;
+  final bool showArtwork;
+  final Alignment? watermarkAlignment;
   final Color? iconBackgroundColor;
   final Color? iconColor;
 
@@ -3074,7 +3158,7 @@ class _LibraryFeatureCard extends StatelessWidget {
             ),
             child: Stack(
               children: <Widget>[
-                if (compactLayout)
+                if (icon != null && showArtwork && compactLayout)
                   Positioned(
                     top: 0,
                     left: 0,
@@ -3086,7 +3170,7 @@ class _LibraryFeatureCard extends StatelessWidget {
                       size: 24,
                     ),
                   )
-                else
+                else if (icon != null && showArtwork)
                   Positioned(
                     top: 0,
                     left: 0,
@@ -3110,24 +3194,27 @@ class _LibraryFeatureCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                Align(
-                  alignment: compactLayout
-                      ? Alignment.topCenter
-                      : Alignment.topRight,
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      top: compactLayout ? 4 : 0,
-                      right: compactLayout ? 0 : 0,
-                    ),
-                    child: Icon(
-                      watermark,
-                      size: compactLayout ? 92 : 114,
-                      color: darkText
-                          ? Colors.white.withValues(alpha: 0.16)
-                          : Colors.white.withValues(alpha: 0.06),
+                if (showArtwork)
+                  Align(
+                    alignment:
+                        watermarkAlignment ??
+                        (compactLayout
+                            ? Alignment.topCenter
+                            : Alignment.topRight),
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        top: compactLayout ? 4 : 0,
+                        right: compactLayout ? 0 : 0,
+                      ),
+                      child: Icon(
+                        watermark,
+                        size: compactLayout ? 92 : 114,
+                        color: darkText
+                            ? Colors.white.withValues(alpha: 0.16)
+                            : Colors.white.withValues(alpha: 0.06),
+                      ),
                     ),
                   ),
-                ),
                 Positioned(
                   left: 0,
                   right: 0,
@@ -3474,8 +3561,201 @@ class _SwipeActionBackground extends StatelessWidget {
   }
 }
 
+class _BoundedQueueSwipeTile extends StatefulWidget {
+  const _BoundedQueueSwipeTile({
+    required this.child,
+    required this.background,
+    required this.onQueue,
+    this.secondaryBackground,
+    this.onRemove,
+  });
+
+  final Widget child;
+  final Widget background;
+  final Widget? secondaryBackground;
+  final Future<void> Function() onQueue;
+  final Future<void> Function()? onRemove;
+
+  @override
+  State<_BoundedQueueSwipeTile> createState() => _BoundedQueueSwipeTileState();
+}
+
+class _BoundedQueueSwipeTileState extends State<_BoundedQueueSwipeTile>
+    with SingleTickerProviderStateMixin {
+  static const double _queueMaxExtentFactor = 0.75;
+  static const double _queueTriggerFactor = 0.22;
+  static const double _queueTriggerMinDistance = 88;
+  static const double _removeTriggerFactor = 0.42;
+
+  late final AnimationController _controller;
+  Animation<double> _offsetAnimation = const AlwaysStoppedAnimation<double>(0);
+  double _dragOffset = 0;
+  bool _actionInFlight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 180),
+        )..addListener(() {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _dragOffset = _offsetAnimation.value;
+          });
+        });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _animateTo(double target) async {
+    _controller.stop();
+    _offsetAnimation = Tween<double>(
+      begin: _dragOffset,
+      end: target,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    await _controller.forward(from: 0);
+  }
+
+  double _availableWidth(BuildContext context) {
+    final RenderBox? box = context.findRenderObject() as RenderBox?;
+    return box?.size.width ?? MediaQuery.sizeOf(context).width;
+  }
+
+  void _handleDragStart(DragStartDetails details) {
+    if (_actionInFlight) {
+      return;
+    }
+    _controller.stop();
+  }
+
+  void _handleDragUpdate(DragUpdateDetails details) {
+    if (_actionInFlight) {
+      return;
+    }
+
+    final double width = _availableWidth(context);
+    final double maxQueueOffset = width * _queueMaxExtentFactor;
+    final double minRemoveOffset = widget.onRemove == null ? 0 : -width;
+    final double nextOffset = (_dragOffset + details.primaryDelta!).clamp(
+      minRemoveOffset,
+      maxQueueOffset,
+    );
+
+    if (nextOffset == _dragOffset) {
+      return;
+    }
+    _controller.stop();
+    setState(() {
+      _dragOffset = nextOffset;
+    });
+  }
+
+  Future<void> _handleDragEnd(DragEndDetails details) async {
+    if (_actionInFlight) {
+      return;
+    }
+
+    final double width = _availableWidth(context);
+    final double queueTrigger = math.min(
+      width * _queueTriggerFactor,
+      _queueTriggerMinDistance,
+    );
+    final double removeTrigger = width * _removeTriggerFactor;
+    final double velocity = details.primaryVelocity ?? 0;
+    final bool shouldQueue = _dragOffset >= queueTrigger || velocity > 480;
+    final bool shouldRemove =
+        widget.onRemove != null &&
+        (_dragOffset < -removeTrigger || velocity < -700);
+
+    _actionInFlight = true;
+    try {
+      Future<void> Function()? pendingAction;
+      if (shouldQueue) {
+        await _animateTo(width * _queueMaxExtentFactor);
+        pendingAction = widget.onQueue;
+      } else if (shouldRemove && widget.onRemove != null) {
+        await _animateTo(-width);
+        pendingAction = widget.onRemove;
+      }
+      if (mounted) {
+        await _animateTo(0);
+      }
+      if (pendingAction != null) {
+        unawaited(pendingAction());
+      }
+    } finally {
+      _actionInFlight = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final double revealedWidth = _dragOffset.abs().clamp(
+            0,
+            constraints.maxWidth,
+          );
+          final Widget activeBackground = _dragOffset < 0
+              ? widget.secondaryBackground ?? const SizedBox.shrink()
+              : widget.background;
+
+          return Stack(
+            children: <Widget>[
+              if (revealedWidth > 0)
+                Positioned(
+                  left: _dragOffset > 0 ? 0 : null,
+                  right: _dragOffset < 0 ? 0 : null,
+                  top: 0,
+                  bottom: 0,
+                  width: revealedWidth,
+                  child: ClipRect(
+                    child: OverflowBox(
+                      alignment: _dragOffset > 0
+                          ? Alignment.centerLeft
+                          : Alignment.centerRight,
+                      minWidth: constraints.maxWidth,
+                      maxWidth: constraints.maxWidth,
+                      child: activeBackground,
+                    ),
+                  ),
+                ),
+              Transform.translate(
+                offset: Offset(_dragOffset, 0),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragStart: _handleDragStart,
+                  onHorizontalDragUpdate: _handleDragUpdate,
+                  onHorizontalDragEnd: _handleDragEnd,
+                  onHorizontalDragCancel: () {
+                    if (!_actionInFlight) {
+                      unawaited(_animateTo(0));
+                    }
+                  },
+                  child: widget.child,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 Future<void> _removeQueueSongWithUndo(
   ScaffoldMessengerState messenger, {
+  required BuildContext context,
   required MusixController controller,
   required LibrarySong song,
   required int queueIndex,
@@ -3485,6 +3765,7 @@ Future<void> _removeQueueSongWithUndo(
   final Future<bool> undoFuture = _showMusixUndoSnackBarWithMessenger(
     messenger,
     'Removed from queue',
+    context: context,
   );
   final bool removed = await removeFuture;
   if (!removed) {
@@ -3503,6 +3784,7 @@ Future<void> _removeQueueSongWithUndo(
 
 Future<void> _removePlaylistSongWithUndo(
   ScaffoldMessengerState messenger, {
+  required BuildContext context,
   required MusixController controller,
   required String playlistId,
   required String songId,
@@ -3515,6 +3797,7 @@ Future<void> _removePlaylistSongWithUndo(
   final Future<bool> undoFuture = _showMusixUndoSnackBarWithMessenger(
     messenger,
     'Removed from playlist',
+    context: context,
   );
   final int? removedIndex = await removeFuture;
   if (removedIndex == null) {
@@ -3535,6 +3818,7 @@ Future<void> _removePlaylistSongWithUndo(
 
 Future<void> _removeDownloadedSongWithUndo(
   ScaffoldMessengerState messenger, {
+  required BuildContext context,
   required MusixController controller,
   required LibrarySong song,
 }) async {
@@ -3542,6 +3826,7 @@ Future<void> _removeDownloadedSongWithUndo(
   final Future<bool> undoFuture = _showMusixUndoSnackBarWithMessenger(
     messenger,
     'Removed downloaded song',
+    context: context,
   );
   final int? removedIndex = await removeFuture;
   if (removedIndex == null) {
@@ -3617,15 +3902,7 @@ class _SongTile extends StatelessWidget {
     final bool canSwipeLeftToRemove =
         canRemoveFromPlaylist || canRemoveDownloadedSong;
 
-    final DismissDirection direction = canSwipeLeftToRemove
-        ? DismissDirection.horizontal
-        : DismissDirection.startToEnd;
-
-    return Dismissible(
-      key: ValueKey<String>(
-        'song-tile-${extraPlaylistId ?? song.sourceLabel}-${index ?? -1}-${song.id}',
-      ),
-      direction: direction,
+    return _BoundedQueueSwipeTile(
       background: const _SwipeActionBackground(
         alignment: Alignment.centerLeft,
         color: Color(0xFF18432B),
@@ -3640,44 +3917,37 @@ class _SongTile extends StatelessWidget {
               label: 'Remove',
             )
           : null,
-      confirmDismiss: (DismissDirection dismissedDirection) async {
-        final bool swipedRight =
-            dismissedDirection == DismissDirection.startToEnd;
-        if (swipedRight) {
-          await HapticFeedback.selectionClick();
-          await controller.enqueueSong(song);
-          if (context.mounted) {
-            _showMusixSnackBar(context, 'Added to queue');
-          }
-          return false;
-        }
-        if (!swipedRight && canSwipeLeftToRemove) {
-          await HapticFeedback.mediumImpact();
-          return true;
-        }
-        return false;
-      },
-      onDismissed: (DismissDirection dismissedDirection) async {
-        if (dismissedDirection == DismissDirection.endToStart &&
-            canRemoveFromPlaylist &&
-            extraPlaylistId != null &&
-            playlistSongIndex != null) {
-          await _removePlaylistSongWithUndo(
-            messenger,
-            controller: controller,
-            playlistId: extraPlaylistId!,
-            songId: song.id,
-            playlistSongIndex: playlistSongIndex!,
-          );
-        } else if (dismissedDirection == DismissDirection.endToStart &&
-            canRemoveDownloadedSong) {
-          await _removeDownloadedSongWithUndo(
-            messenger,
-            controller: controller,
-            song: song,
-          );
+      onQueue: () async {
+        await HapticFeedback.selectionClick();
+        await controller.enqueueSong(song);
+        if (context.mounted) {
+          _showMusixSnackBar(context, 'Added to queue');
         }
       },
+      onRemove: canSwipeLeftToRemove
+          ? () async {
+              unawaited(HapticFeedback.mediumImpact());
+              if (canRemoveFromPlaylist &&
+                  extraPlaylistId != null &&
+                  playlistSongIndex != null) {
+                await _removePlaylistSongWithUndo(
+                  messenger,
+                  context: context,
+                  controller: controller,
+                  playlistId: extraPlaylistId!,
+                  songId: song.id,
+                  playlistSongIndex: playlistSongIndex!,
+                );
+              } else if (canRemoveDownloadedSong) {
+                await _removeDownloadedSongWithUndo(
+                  messenger,
+                  context: context,
+                  controller: controller,
+                  song: song,
+                );
+              }
+            }
+          : null,
       child: tile,
     );
   }
@@ -3741,6 +4011,7 @@ Future<void> _showSongActionsSheet(
             ? controller.removeSongFromPlaylist(extraPlaylistId, song.id)
             : _removePlaylistSongWithUndo(
                 messenger,
+                context: context,
                 controller: controller,
                 playlistId: extraPlaylistId,
                 songId: song.id,
@@ -3753,6 +4024,7 @@ Future<void> _showSongActionsSheet(
         label: 'Remove download',
         action: () => _removeDownloadedSongWithUndo(
           messenger,
+          context: context,
           controller: controller,
           song: song,
         ),
