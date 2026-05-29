@@ -1,5 +1,8 @@
 part of '../../musix_ui.dart';
 
+const bool _disableHomeSongCardLoadingAnimation = true;
+const bool _disableHomeSongCardRevealAnimation = true;
+
 class _HomeText {
   const _HomeText._();
 
@@ -385,7 +388,10 @@ class _HomeScreenState extends State<_HomeScreen>
               backgroundColor: _kSurface,
               onRefresh: _refreshHome,
               child: _HomeRevealAnimationScope(
-                animateReveals: _animateHomeReveals,
+                animateProgressiveLoading:
+                    !_disableHomeSongCardLoadingAnimation,
+                animateReveals:
+                    !_disableHomeSongCardRevealAnimation && _animateHomeReveals,
                 child: ListView(
                   controller: _scroll,
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -3042,6 +3048,17 @@ class _ProgressiveListRevealState extends State<_ProgressiveListReveal> {
       return;
     }
 
+    final bool animateProgressiveLoading =
+        _HomeRevealAnimationScope.read(context)?.animateProgressiveLoading ??
+        true;
+    if (!animateProgressiveLoading) {
+      _visibleCount = widget.itemCount;
+      if (allowImmediateSetState) {
+        setState(() {});
+      }
+      return;
+    }
+
     if (reset) {
       _visibleCount = 0;
     }
@@ -3099,10 +3116,12 @@ class _ProgressiveListRevealState extends State<_ProgressiveListReveal> {
 
 class _HomeRevealAnimationScope extends InheritedWidget {
   const _HomeRevealAnimationScope({
+    required this.animateProgressiveLoading,
     required this.animateReveals,
     required super.child,
   });
 
+  final bool animateProgressiveLoading;
   final bool animateReveals;
 
   static _HomeRevealAnimationScope? maybeOf(BuildContext context) {
@@ -3110,9 +3129,19 @@ class _HomeRevealAnimationScope extends InheritedWidget {
         .dependOnInheritedWidgetOfExactType<_HomeRevealAnimationScope>();
   }
 
+  static _HomeRevealAnimationScope? read(BuildContext context) {
+    return context
+            .getElementForInheritedWidgetOfExactType<
+              _HomeRevealAnimationScope
+            >()
+            ?.widget
+        as _HomeRevealAnimationScope?;
+  }
+
   @override
   bool updateShouldNotify(_HomeRevealAnimationScope oldWidget) {
-    return animateReveals != oldWidget.animateReveals;
+    return animateProgressiveLoading != oldWidget.animateProgressiveLoading ||
+        animateReveals != oldWidget.animateReveals;
   }
 }
 
