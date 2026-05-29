@@ -112,190 +112,185 @@ class _DesktopHomeScreen extends StatelessWidget {
       mayYouLike: mayYouLikeFull,
     );
 
-    return _HomeRevealAnimationScope(
-      animateProgressiveLoading: !_disableHomeSongCardLoadingAnimation,
-      animateReveals: !_disableHomeSongCardRevealAnimation,
-      child: _DesktopPageScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            _DesktopPanel(
-              child: showRecommendationLoadingState
-                  ? const _MusixHeroSkeleton()
-                  : featured != null
-                  ? _MusixHeroCard(
-                      badge: featured.badge,
-                      title: featured.title,
-                      subtitle: featured.subtitle,
-                      imageUrl: featured.imageUrl,
-                      onListenNow: featured.onListenNow,
-                    )
-                  : _PersonalizationHintCard(
-                      message: emptyStateMessages.heroMessage,
-                    ),
+    return _DesktopPageScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _DesktopPanel(
+            child: showRecommendationLoadingState
+                ? const _MusixHeroSkeleton()
+                : featured != null
+                ? _MusixHeroCard(
+                    badge: featured.badge,
+                    title: featured.title,
+                    subtitle: featured.subtitle,
+                    imageUrl: featured.imageUrl,
+                    onListenNow: featured.onListenNow,
+                  )
+                : _PersonalizationHintCard(
+                    message: emptyStateMessages.heroMessage,
+                  ),
+          ),
+          const SizedBox(height: 20),
+          _DesktopPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _MusixSectionHeader(
+                  title: _HomeText.mayYouLike,
+                  onViewAll: () {
+                    if (mayYouLikeFull.isEmpty) {
+                      onOpenSearch();
+                      return;
+                    }
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (BuildContext context) =>
+                            _MayYouLikeScreen(controller: controller),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                if (showRecommendationLoadingState)
+                  const _MusixListSkeleton(count: 4)
+                else if (mayYouLike.isEmpty)
+                  _PersonalizationHintCard(
+                    message: emptyStateMessages.mayYouLikeMessage,
+                  )
+                else
+                  _ProgressiveListReveal(
+                    itemCount: mayYouLike.length,
+                    showTrailingPlaceholders: true,
+                    itemBuilder: (BuildContext context, int index) {
+                      final LibrarySong song = mayYouLike[index];
+                      return _MusixPopularTrackTile(
+                        index: index + 1,
+                        song: song,
+                        controller: controller,
+                        onTap: () {
+                          if (song.isRemote) {
+                            controller.playOnlineSong(song);
+                          } else {
+                            controller.playSong(song, label: 'May you like');
+                          }
+                        },
+                      );
+                    },
+                  ),
+              ],
             ),
+          ),
+          if (showRecommendationLoadingState) ...<Widget>[
+            const SizedBox(height: 20),
+            const _RecommendationShelfSkeleton(wrapInDesktopPanel: true),
+            const SizedBox(height: 20),
+            const _TopArtistsLoadingBlock(isDesktop: true),
+          ] else ...<Widget>[
+            if (featuredArtistSection != null) ...<Widget>[
+              _buildHomeShelf(
+                context: context,
+                controller: controller,
+                section: featuredArtistSection,
+                wrapInDesktopPanel: true,
+                topPadding: 20,
+              ),
+            ],
+            const SizedBox(height: 20),
+            _DesktopPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const _MusixSectionHeader(title: _HomeText.topArtists),
+                  const SizedBox(height: 10),
+                  _TopArtistsSection(controller: controller, isDesktop: true),
+                ],
+              ),
+            ),
+          ],
+          ..._buildMoreShelves(
+            context: context,
+            controller: controller,
+            wrapInDesktopPanel: true,
+            includeFeaturedArtistSection: false,
+          ),
+          if (controller.homeLoading && !hasRevealableContent) ...<Widget>[
+            const SizedBox(height: 20),
+            const _DesktopPanel(
+              child: Opacity(opacity: 0.8, child: _HomeFeedSkeleton()),
+            ),
+          ],
+          if (!controller.homeLoading && jumpBackIn.isNotEmpty) ...<Widget>[
             const SizedBox(height: 20),
             _DesktopPanel(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   _MusixSectionHeader(
-                    title: _HomeText.mayYouLike,
-                    onViewAll: () {
-                      if (mayYouLikeFull.isEmpty) {
-                        onOpenSearch();
-                        return;
-                      }
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (BuildContext context) =>
-                              _MayYouLikeScreen(controller: controller),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  if (showRecommendationLoadingState)
-                    const _MusixListSkeleton(count: 4)
-                  else if (mayYouLike.isEmpty)
-                    _PersonalizationHintCard(
-                      message: emptyStateMessages.mayYouLikeMessage,
-                    )
-                  else
-                    _ProgressiveListReveal(
-                      itemCount: mayYouLike.length,
-                      showTrailingPlaceholders: true,
-                      itemBuilder: (BuildContext context, int index) {
-                        final LibrarySong song = mayYouLike[index];
-                        return _MusixPopularTrackTile(
-                          index: index + 1,
-                          song: song,
-                          controller: controller,
-                          onTap: () {
-                            if (song.isRemote) {
-                              controller.playOnlineSong(song);
-                            } else {
-                              controller.playSong(song, label: 'May you like');
-                            }
-                          },
+                    title: _HomeText.jumpBackIn,
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (BuildContext context) =>
+                                _RecentPlaysScreen(controller: controller),
+                          ),
                         );
                       },
+                      style: TextButton.styleFrom(
+                        foregroundColor: _kAccent,
+                        backgroundColor: const Color(0x221C0904),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: const BorderSide(color: _kSurfaceEdge),
+                        ),
+                        textStyle: _musixBodyTextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      child: const Text('Open history'),
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  LayoutBuilder(
+                    builder:
+                        (BuildContext context, BoxConstraints constraints) {
+                          final double width = (constraints.maxWidth - 20) / 2;
+                          return Wrap(
+                            spacing: 20,
+                            runSpacing: 20,
+                            children: jumpBackIn.map((LibrarySong song) {
+                              return _MusixJumpBackCard(
+                                width: width.clamp(220.0, 420.0),
+                                title: song.title,
+                                subtitle: _songArtistLabel(song),
+                                seed: song.id,
+                                imageUrl: song.artworkUrl,
+                                onTap: () {
+                                  if (song.isRemote) {
+                                    controller.playOnlineSong(song);
+                                  } else {
+                                    controller.playSong(
+                                      song,
+                                      label: 'Jump back in',
+                                    );
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          );
+                        },
+                  ),
                 ],
               ),
             ),
-            if (showRecommendationLoadingState) ...<Widget>[
-              const SizedBox(height: 20),
-              const _RecommendationShelfSkeleton(wrapInDesktopPanel: true),
-              const SizedBox(height: 20),
-              const _TopArtistsLoadingBlock(isDesktop: true),
-            ] else ...<Widget>[
-              if (featuredArtistSection != null) ...<Widget>[
-                _buildHomeShelf(
-                  context: context,
-                  controller: controller,
-                  section: featuredArtistSection,
-                  wrapInDesktopPanel: true,
-                  topPadding: 20,
-                ),
-              ],
-              const SizedBox(height: 20),
-              _DesktopPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const _MusixSectionHeader(title: _HomeText.topArtists),
-                    const SizedBox(height: 10),
-                    _TopArtistsSection(controller: controller, isDesktop: true),
-                  ],
-                ),
-              ),
-            ],
-            ..._buildMoreShelves(
-              context: context,
-              controller: controller,
-              wrapInDesktopPanel: true,
-              includeFeaturedArtistSection: false,
-            ),
-            if (controller.homeLoading && !hasRevealableContent) ...<Widget>[
-              const SizedBox(height: 20),
-              const _DesktopPanel(
-                child: Opacity(opacity: 0.8, child: _HomeFeedSkeleton()),
-              ),
-            ],
-            if (!controller.homeLoading && jumpBackIn.isNotEmpty) ...<Widget>[
-              const SizedBox(height: 20),
-              _DesktopPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    _MusixSectionHeader(
-                      title: _HomeText.jumpBackIn,
-                      trailing: TextButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (BuildContext context) =>
-                                  _RecentPlaysScreen(controller: controller),
-                            ),
-                          );
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: _kAccent,
-                          backgroundColor: const Color(0x221C0904),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: const BorderSide(color: _kSurfaceEdge),
-                          ),
-                          textStyle: _musixBodyTextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        child: const Text('Open history'),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    LayoutBuilder(
-                      builder:
-                          (BuildContext context, BoxConstraints constraints) {
-                            final double width =
-                                (constraints.maxWidth - 20) / 2;
-                            return Wrap(
-                              spacing: 20,
-                              runSpacing: 20,
-                              children: jumpBackIn.map((LibrarySong song) {
-                                return _MusixJumpBackCard(
-                                  width: width.clamp(220.0, 420.0),
-                                  title: song.title,
-                                  subtitle: _songArtistLabel(song),
-                                  seed: song.id,
-                                  imageUrl: song.artworkUrl,
-                                  onTap: () {
-                                    if (song.isRemote) {
-                                      controller.playOnlineSong(song);
-                                    } else {
-                                      controller.playSong(
-                                        song,
-                                        label: 'Jump back in',
-                                      );
-                                    }
-                                  },
-                                );
-                              }).toList(),
-                            );
-                          },
-                    ),
-                  ],
-                ),
-              ),
-            ],
           ],
-        ),
+        ],
       ),
     );
   }

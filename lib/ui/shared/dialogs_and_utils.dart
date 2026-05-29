@@ -138,84 +138,73 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final double bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final bool canCreate = _input.text.trim().isNotEmpty;
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.fromLTRB(28, 24, 28, 24 + bottomInset),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Dialog(
-            insetPadding: EdgeInsets.zero,
-            backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
-            surfaceTintColor: Theme.of(context).dialogTheme.surfaceTintColor,
-            shape: Theme.of(context).dialogTheme.shape,
-            clipBehavior: Clip.antiAlias,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(28, 26, 28, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
+        surfaceTintColor: Theme.of(context).dialogTheme.surfaceTintColor,
+        shape: Theme.of(context).dialogTheme.shape,
+        clipBehavior: Clip.antiAlias,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(28, 26, 28, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                widget.title,
+                style: Theme.of(context).dialogTheme.titleTextStyle,
+              ),
+              const SizedBox(height: 26),
+              TextField(
+                controller: _input,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => _submit(),
+                style: _musixBodyTextStyle(color: _kTextPrimary, fontSize: 18),
+                cursorColor: _kAccent,
+                decoration: musixInputDecoration(
+                  hintText: widget.hintText,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 16,
+                  ),
+                  borderRadius: 18,
+                  floatingLabelBehavior: FloatingLabelBehavior.never,
+                ),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
-                  Text(
-                    widget.title,
-                    style: Theme.of(context).dialogTheme.titleTextStyle,
-                  ),
-                  const SizedBox(height: 26),
-                  TextField(
-                    controller: _input,
-                    autofocus: true,
-                    onChanged: (_) => setState(() {}),
-                    onSubmitted: (_) => _submit(),
-                    style: _musixBodyTextStyle(
-                      color: _kTextPrimary,
-                      fontSize: 18,
-                    ),
-                    cursorColor: _kAccent,
-                    decoration: musixInputDecoration(
-                      hintText: widget.hintText,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 16,
-                      ),
-                      borderRadius: 18,
-                      floatingLabelBehavior: FloatingLabelBehavior.never,
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.of(context, rootNavigator: true).pop(),
+                    style: musixDialogSecondaryButtonStyle(),
+                    child: Text(
+                      'Cancel',
+                      style: _musixBodyTextStyle(fontSize: 16),
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: <Widget>[
-                      TextButton(
-                        onPressed: () =>
-                            Navigator.of(context, rootNavigator: true).pop(),
-                        style: musixDialogSecondaryButtonStyle(),
-                        child: Text(
-                          'Cancel',
-                          style: _musixBodyTextStyle(fontSize: 16),
-                        ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    onPressed: canCreate ? _submit : null,
+                    style: musixDialogPrimaryButtonStyle(),
+                    child: Text(
+                      widget.actionLabel,
+                      style: _musixBodyTextStyle(
+                        fontSize: 16,
+                        color: MusixColors.shellBackground,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(width: 12),
-                      FilledButton(
-                        onPressed: canCreate ? _submit : null,
-                        style: musixDialogPrimaryButtonStyle(),
-                        child: Text(
-                          widget.actionLabel,
-                          style: _musixBodyTextStyle(
-                            fontSize: 16,
-                            color: MusixColors.shellBackground,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
         ),
       ),

@@ -1,8 +1,5 @@
 part of '../../musix_ui.dart';
 
-const bool _disableHomeSongCardLoadingAnimation = true;
-const bool _disableHomeSongCardRevealAnimation = true;
-
 class _HomeText {
   const _HomeText._();
 
@@ -268,7 +265,6 @@ class _HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<_HomeScreen>
     with AutomaticKeepAliveClientMixin<_HomeScreen> {
   final ScrollController _scroll = ScrollController();
-  bool _animateHomeReveals = true;
 
   @override
   void initState() {
@@ -288,18 +284,6 @@ class _HomeScreenState extends State<_HomeScreen>
 
   void _onScroll() {
     widget.controller.registerScrollActivity();
-    final ScrollDirection direction = _scroll.position.userScrollDirection;
-    final bool? shouldAnimate = switch (direction) {
-      ScrollDirection.reverse => true,
-      ScrollDirection.forward => false,
-      ScrollDirection.idle => null,
-    };
-    if (shouldAnimate != null && shouldAnimate != _animateHomeReveals) {
-      setState(() {
-        _animateHomeReveals = shouldAnimate;
-      });
-    }
-    // Home recommendations are intentionally static for this app session.
   }
 
   Future<void> _refreshHome() async {
@@ -366,6 +350,127 @@ class _HomeScreenState extends State<_HomeScreen>
       feed: feed,
       mayYouLike: mayYouLikeFull,
     );
+    final List<HomeFeedSection> moreShelves = showRecommendationLoadingState
+        ? const <HomeFeedSection>[]
+        : _normalizedHomeShelves(feed, includeFeaturedArtistSection: false);
+    final List<WidgetBuilder> homeItemBuilders = <WidgetBuilder>[
+      (_) => const _MusixTopBar(),
+      (_) => const SizedBox(height: 14),
+      (_) {
+        if (showRecommendationLoadingState) {
+          return const _MusixHeroSkeleton();
+        }
+        if (featured != null) {
+          return _MusixHeroCard(
+            badge: featured.badge,
+            title: featured.title,
+            subtitle: featured.subtitle,
+            imageUrl: featured.imageUrl,
+            onListenNow: featured.onListenNow,
+          );
+        }
+        return _PersonalizationHintCard(
+          message: emptyStateMessages.heroMessage,
+        );
+      },
+      (_) => const SizedBox(height: 18),
+      (_) => _MusixSectionHeader(
+        title: _HomeText.mayYouLike,
+        onViewAll: () {
+          if (mayYouLikeFull.isEmpty) {
+            widget.onOpenSearch();
+            return;
+          }
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (BuildContext context) =>
+                  _MayYouLikeScreen(controller: controller),
+            ),
+          );
+        },
+      ),
+      (_) => const SizedBox(height: 10),
+      (_) {
+        if (showRecommendationLoadingState) {
+          return const _MusixListSkeleton(count: 4);
+        }
+        if (mayYouLike.isEmpty) {
+          return _PersonalizationHintCard(
+            message: emptyStateMessages.mayYouLikeMessage,
+          );
+        }
+        return _ProgressiveListReveal(
+          itemCount: mayYouLike.length,
+          itemBuilder: (BuildContext context, int index) {
+            final LibrarySong song = mayYouLike[index];
+            return _MusixPopularTrackTile(
+              index: index + 1,
+              song: song,
+              controller: controller,
+              onTap: () {
+                if (song.isRemote) {
+                  controller.playOnlineSong(song);
+                } else {
+                  controller.playSong(song, label: 'May you like');
+                }
+              },
+            );
+          },
+        );
+      },
+      if (showRecommendationLoadingState) ...<WidgetBuilder>[
+        (_) => const SizedBox(height: 18),
+        (_) => const _RecommendationShelfSkeleton(),
+        (_) => const SizedBox(height: 18),
+        (_) => const _TopArtistsLoadingBlock(),
+      ] else ...<WidgetBuilder>[
+        if (featuredArtistSection != null)
+          (_) => _buildHomeShelf(
+            context: context,
+            controller: controller,
+            section: featuredArtistSection,
+          ),
+        (_) => const SizedBox(height: 18),
+        (_) => const _MusixSectionHeader(title: _HomeText.topArtists),
+        (_) => const SizedBox(height: 10),
+        (_) => _TopArtistsSection(controller: controller),
+        for (final HomeFeedSection section in moreShelves)
+          (_) => _buildHomeShelf(
+            context: context,
+            controller: controller,
+            section: section,
+          ),
+      ],
+      if (!controller.homeLoading && jumpBackIn.isNotEmpty) ...<WidgetBuilder>[
+        (_) => const SizedBox(height: 18),
+        (_) => _MusixSectionHeader(
+          title: _HomeText.jumpBackIn,
+          onViewAll: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (BuildContext context) =>
+                    _RecentPlaysScreen(controller: controller),
+              ),
+            );
+          },
+        ),
+        (_) => const SizedBox(height: 10),
+        (_) => _MusixJumpBackGrid(
+          items: jumpBackIn,
+          onTapItem: (LibrarySong song) {
+            if (song.isRemote) {
+              controller.playOnlineSong(song);
+            } else {
+              controller.playSong(song, label: 'Jump back in');
+            }
+          },
+        ),
+      ],
+      if (controller.homeLoading && !hasRevealableContent) ...<WidgetBuilder>[
+        (_) => const SizedBox(height: 16),
+        (_) => const Opacity(opacity: 0.8, child: _HomeFeedSkeleton()),
+      ],
+    ];
 
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -387,136 +492,26 @@ class _HomeScreenState extends State<_HomeScreen>
               color: _kAccent,
               backgroundColor: _kSurface,
               onRefresh: _refreshHome,
-              child: _HomeRevealAnimationScope(
-                animateProgressiveLoading:
-                    !_disableHomeSongCardLoadingAnimation,
-                animateReveals:
-                    !_disableHomeSongCardRevealAnimation && _animateHomeReveals,
-                child: ListView(
-                  controller: _scroll,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: _rootScreenContentPadding(
-                    context,
-                    hasMiniPlayer: controller.miniPlayerSong != null,
-                  ),
-                  children: <Widget>[
-                    const _MusixTopBar(),
-                    const SizedBox(height: 14),
-                    if (showRecommendationLoadingState)
-                      const _MusixHeroSkeleton()
-                    else if (featured != null)
-                      _MusixHeroCard(
-                        badge: featured.badge,
-                        title: featured.title,
-                        subtitle: featured.subtitle,
-                        imageUrl: featured.imageUrl,
-                        onListenNow: featured.onListenNow,
-                      )
-                    else
-                      _PersonalizationHintCard(
-                        message: emptyStateMessages.heroMessage,
-                      ),
-                    const SizedBox(height: 18),
-                    _MusixSectionHeader(
-                      title: _HomeText.mayYouLike,
-                      onViewAll: () {
-                        if (mayYouLikeFull.isEmpty) {
-                          widget.onOpenSearch();
-                          return;
-                        }
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (BuildContext context) =>
-                                _MayYouLikeScreen(controller: controller),
-                          ),
-                        );
-                      },
+              child: CustomScrollView(
+                controller: _scroll,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: <Widget>[
+                  SliverPadding(
+                    padding: _rootScreenContentPadding(
+                      context,
+                      hasMiniPlayer: controller.miniPlayerSong != null,
                     ),
-                    const SizedBox(height: 10),
-                    if (showRecommendationLoadingState)
-                      const _MusixListSkeleton(count: 4)
-                    else if (mayYouLike.isEmpty)
-                      _PersonalizationHintCard(
-                        message: emptyStateMessages.mayYouLikeMessage,
-                      )
-                    else
-                      _ProgressiveListReveal(
-                        itemCount: mayYouLike.length,
-                        showTrailingPlaceholders: true,
-                        itemBuilder: (BuildContext context, int index) {
-                          final LibrarySong song = mayYouLike[index];
-                          return _MusixPopularTrackTile(
-                            index: index + 1,
-                            song: song,
-                            controller: controller,
-                            onTap: () {
-                              if (song.isRemote) {
-                                controller.playOnlineSong(song);
-                              } else {
-                                controller.playSong(
-                                  song,
-                                  label: 'May you like',
-                                );
-                              }
-                            },
-                          );
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (BuildContext context, int index) {
+                          return homeItemBuilders[index](context);
                         },
+                        childCount: homeItemBuilders.length,
+                        addAutomaticKeepAlives: false,
                       ),
-                    if (showRecommendationLoadingState) ...<Widget>[
-                      const SizedBox(height: 18),
-                      const _RecommendationShelfSkeleton(),
-                      const SizedBox(height: 18),
-                      const _TopArtistsLoadingBlock(),
-                    ] else ...<Widget>[
-                      if (featuredArtistSection != null)
-                        _buildHomeShelf(
-                          context: context,
-                          controller: controller,
-                          section: featuredArtistSection,
-                        ),
-                      const SizedBox(height: 18),
-                      const _MusixSectionHeader(title: _HomeText.topArtists),
-                      const SizedBox(height: 10),
-                      _TopArtistsSection(controller: controller),
-                      ..._buildMoreShelves(
-                        context: context,
-                        controller: controller,
-                        includeFeaturedArtistSection: false,
-                      ),
-                    ],
-                    if (!controller.homeLoading &&
-                        jumpBackIn.isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 18),
-                      _MusixSectionHeader(
-                        title: _HomeText.jumpBackIn,
-                        onViewAll: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (BuildContext context) =>
-                                  _RecentPlaysScreen(controller: controller),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      _MusixJumpBackGrid(
-                        items: jumpBackIn,
-                        onTapItem: (LibrarySong song) {
-                          if (song.isRemote) {
-                            controller.playOnlineSong(song);
-                          } else {
-                            controller.playSong(song, label: 'Jump back in');
-                          }
-                        },
-                      ),
-                    ],
-                    if (controller.homeLoading &&
-                        !hasRevealableContent) ...<Widget>[
-                      const SizedBox(height: 16),
-                      const Opacity(opacity: 0.8, child: _HomeFeedSkeleton()),
-                    ],
-                  ],
-                ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -955,7 +950,7 @@ class _TopArtistsSection extends StatelessWidget {
   }
 }
 
-class _ProgressiveArtistRowReveal extends StatefulWidget {
+class _ProgressiveArtistRowReveal extends StatelessWidget {
   const _ProgressiveArtistRowReveal({
     required this.itemCount,
     required this.itemBuilder,
@@ -969,96 +964,13 @@ class _ProgressiveArtistRowReveal extends StatefulWidget {
   final double spacing;
 
   @override
-  State<_ProgressiveArtistRowReveal> createState() =>
-      _ProgressiveArtistRowRevealState();
-}
-
-class _ProgressiveArtistRowRevealState
-    extends State<_ProgressiveArtistRowReveal> {
-  Timer? _timer;
-  int _visibleCount = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _scheduleReveal(reset: true, allowImmediateSetState: false);
-  }
-
-  @override
-  void didUpdateWidget(covariant _ProgressiveArtistRowReveal oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.itemCount < _visibleCount) {
-      _visibleCount = widget.itemCount;
-    }
-    if (widget.itemCount != oldWidget.itemCount) {
-      _scheduleReveal(
-        reset: widget.itemCount == 0 || oldWidget.itemCount == 0,
-        allowImmediateSetState: true,
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _scheduleReveal({
-    required bool reset,
-    required bool allowImmediateSetState,
-  }) {
-    _timer?.cancel();
-    if (!mounted) {
-      return;
-    }
-
-    if (reset) {
-      _visibleCount = 0;
-    }
-
-    if (_visibleCount >= widget.itemCount) {
-      if (allowImmediateSetState) {
-        setState(() {});
-      }
-      return;
-    }
-
-    if (allowImmediateSetState) {
-      setState(() {});
-    }
-    _timer = Timer.periodic(const Duration(milliseconds: 85), (Timer timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_visibleCount >= widget.itemCount) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _visibleCount += 1;
-      });
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: List<Widget>.generate(widget.itemCount, (int index) {
-        final bool visible = index < _visibleCount;
-        final Widget child = visible
-            ? _RevealIn(
-                key: ValueKey<String>('artist-reveal-$index'),
-                child: widget.itemBuilder(context, index),
-              )
-            : widget.placeholderBuilder(context, index);
+      children: List<Widget>.generate(itemCount, (int index) {
         return Padding(
-          padding: EdgeInsets.only(
-            right: index == widget.itemCount - 1 ? 0 : widget.spacing,
-          ),
-          child: child,
+          padding: EdgeInsets.only(right: index == itemCount - 1 ? 0 : spacing),
+          child: itemBuilder(context, index),
         );
       }),
     );
@@ -2906,7 +2818,7 @@ class _MayYouLikeScreen extends StatefulWidget {
 }
 
 class _MayYouLikeScreenState extends State<_MayYouLikeScreen> {
-  static const int _maxItems = 50;
+  static const int _maxItems = 25;
 
   List<SongRecommendation> get _allItems => _resolvedMayYouLikeRecommendations(
     widget.controller,
@@ -2994,7 +2906,7 @@ class _MusixListSkeleton extends StatelessWidget {
   }
 }
 
-class _ProgressiveListReveal extends StatefulWidget {
+class _ProgressiveListReveal extends StatelessWidget {
   const _ProgressiveListReveal({
     required this.itemCount,
     required this.itemBuilder,
@@ -3006,142 +2918,12 @@ class _ProgressiveListReveal extends StatefulWidget {
   final bool showTrailingPlaceholders;
 
   @override
-  State<_ProgressiveListReveal> createState() => _ProgressiveListRevealState();
-}
-
-class _ProgressiveListRevealState extends State<_ProgressiveListReveal> {
-  Timer? _timer;
-  int _visibleCount = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _scheduleReveal(reset: true, allowImmediateSetState: false);
-  }
-
-  @override
-  void didUpdateWidget(covariant _ProgressiveListReveal oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.itemCount < _visibleCount) {
-      _visibleCount = widget.itemCount;
-    }
-    if (widget.itemCount != oldWidget.itemCount) {
-      _scheduleReveal(
-        reset: widget.itemCount == 0 || oldWidget.itemCount == 0,
-        allowImmediateSetState: true,
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _scheduleReveal({
-    required bool reset,
-    required bool allowImmediateSetState,
-  }) {
-    _timer?.cancel();
-    if (!mounted) {
-      return;
-    }
-
-    final bool animateProgressiveLoading =
-        _HomeRevealAnimationScope.read(context)?.animateProgressiveLoading ??
-        true;
-    if (!animateProgressiveLoading) {
-      _visibleCount = widget.itemCount;
-      if (allowImmediateSetState) {
-        setState(() {});
-      }
-      return;
-    }
-
-    if (reset) {
-      _visibleCount = 0;
-    }
-
-    if (_visibleCount >= widget.itemCount) {
-      if (allowImmediateSetState) {
-        setState(() {});
-      }
-      return;
-    }
-
-    if (allowImmediateSetState) {
-      setState(() {});
-    }
-    _timer = Timer.periodic(const Duration(milliseconds: 85), (Timer timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_visibleCount >= widget.itemCount) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _visibleCount += 1;
-      });
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final int placeholderCount = widget.showTrailingPlaceholders
-        ? math.max(widget.itemCount - _visibleCount, 0)
-        : 0;
     return Column(
-      children: <Widget>[
-        ...List<Widget>.generate(_visibleCount, (int index) {
-          return _RevealIn(
-            key: ValueKey<String>('reveal-$index'),
-            child: widget.itemBuilder(context, index),
-          );
-        }),
-        ...List<Widget>.generate(placeholderCount, (int index) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: _MusixPopularTrackTileSkeleton(
-              index: _visibleCount + index + 1,
-            ),
-          );
-        }),
-      ],
+      children: List<Widget>.generate(itemCount, (int index) {
+        return itemBuilder(context, index);
+      }),
     );
-  }
-}
-
-class _HomeRevealAnimationScope extends InheritedWidget {
-  const _HomeRevealAnimationScope({
-    required this.animateProgressiveLoading,
-    required this.animateReveals,
-    required super.child,
-  });
-
-  final bool animateProgressiveLoading;
-  final bool animateReveals;
-
-  static _HomeRevealAnimationScope? maybeOf(BuildContext context) {
-    return context
-        .dependOnInheritedWidgetOfExactType<_HomeRevealAnimationScope>();
-  }
-
-  static _HomeRevealAnimationScope? read(BuildContext context) {
-    return context
-            .getElementForInheritedWidgetOfExactType<
-              _HomeRevealAnimationScope
-            >()
-            ?.widget
-        as _HomeRevealAnimationScope?;
-  }
-
-  @override
-  bool updateShouldNotify(_HomeRevealAnimationScope oldWidget) {
-    return animateProgressiveLoading != oldWidget.animateProgressiveLoading ||
-        animateReveals != oldWidget.animateReveals;
   }
 }
 
@@ -3151,39 +2933,7 @@ class _RevealIn extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final _HomeRevealAnimationScope? revealScope =
-        _HomeRevealAnimationScope.maybeOf(context);
-    if (revealScope != null && !revealScope.animateReveals) {
-      return child;
-    }
-
-    final ScrollableState? scrollable = Scrollable.maybeOf(context);
-    final bool animate =
-        revealScope != null ||
-        scrollable == null ||
-        scrollable.position.userScrollDirection != ScrollDirection.forward;
-    if (!animate) {
-      return child;
-    }
-
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-      tween: Tween<double>(begin: 0, end: 1),
-      child: child,
-      builder: (BuildContext context, double value, Widget? child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - value) * 12),
-            child: child,
-          ),
-        );
-      },
-      onEnd: () {},
-    );
-  }
+  Widget build(BuildContext context) => child;
 }
 
 class _MusixHeroSkeleton extends StatelessWidget {

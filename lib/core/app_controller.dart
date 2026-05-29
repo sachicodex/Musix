@@ -4299,7 +4299,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
           title: query.title,
           subtitle: query.subtitle,
           query: query.query,
-          songs: filtered.take(50).toList(growable: false),
+          songs: filtered.take(25).toList(growable: false),
         ),
       );
       onSectionsChanged?.call(List<HomeFeedSection>.unmodifiable(sections));
@@ -4361,7 +4361,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
   List<SongRecommendation> _mergeStableHomeRecommendations({
     required List<SongRecommendation> existing,
     required List<SongRecommendation> incoming,
-    int limit = 50,
+    int limit = 25,
   }) {
     final List<SongRecommendation> safeExisting = existing
         .where(
@@ -6011,7 +6011,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         })
         .toList(growable: false);
 
-    return _selectPersonalizedRecommendations(scored, limit: 50);
+    return _selectPersonalizedRecommendations(scored, limit: 25);
   }
 
   Set<String> _recentSkippedSongIds() {
@@ -6679,7 +6679,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
 
   List<SongRecommendation> _selectPersonalizedRecommendations(
     List<_ScoredRecommendation> scored, {
-    int limit = 50,
+    int limit = 25,
   }) {
     final List<_ScoredRecommendation> familiar =
         scored.where((item) => !item.isExploratory).toList(growable: false)
