@@ -60,6 +60,9 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
   static const Duration _minBrowsableSongDuration = Duration(seconds: 30);
   static const Duration _minLocalSongDuration = Duration(seconds: 90);
   static const Duration _maxBrowsableSongDuration = Duration(minutes: 10);
+  static const Duration _maxHomeAndSmartQueueSongDuration = Duration(
+    minutes: 6,
+  );
   static const Duration _playbackActivationMinimumLoading = Duration(
     seconds: 1,
   );
@@ -554,6 +557,9 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     if (!shouldShowSongOutsideSearch(song)) {
       return false;
     }
+    if (!_isShortEnoughForHomeAndSmartQueue(song)) {
+      return false;
+    }
     if (_isSongExplicitlyDisliked(song)) {
       return false;
     }
@@ -569,6 +575,20 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
 
   List<LibrarySong> _filterSongsForBrowsing(Iterable<LibrarySong> songs) {
     return songs.where(shouldShowSongOutsideSearch).toList(growable: false);
+  }
+
+  bool _isShortEnoughForHomeAndSmartQueue(LibrarySong song) {
+    final int durationMs = song.durationMs;
+    if (durationMs <= 0) {
+      return true;
+    }
+    return durationMs <= _maxHomeAndSmartQueueSongDuration.inMilliseconds;
+  }
+
+  bool _shouldUseSongInHomeOrSmartQueue(LibrarySong song) {
+    return shouldShowSongOutsideSearch(song) &&
+        _isShortEnoughForHomeAndSmartQueue(song) &&
+        !_isSongExplicitlyDisliked(song);
   }
 
   List<HomeFeedSection> _filterHomeFeedSectionsForBrowsing(
@@ -1654,11 +1674,12 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     final LibrarySong? queuedAnchor = queueSongs.lastOrNull;
     final LibrarySong? current = currentSong;
     final LibrarySong? anchor =
-        (seed != null && shouldShowSongOutsideSearch(seed))
+        (seed != null && _shouldUseSongInHomeOrSmartQueue(seed))
         ? seed
-        : (queuedAnchor != null && shouldShowSongOutsideSearch(queuedAnchor))
+        : (queuedAnchor != null &&
+              _shouldUseSongInHomeOrSmartQueue(queuedAnchor))
         ? queuedAnchor
-        : (current != null && shouldShowSongOutsideSearch(current))
+        : (current != null && _shouldUseSongInHomeOrSmartQueue(current))
         ? current
         : null;
     if (anchor == null) {
@@ -2556,7 +2577,12 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
           _queueSongIds.contains(song.id) ||
           _detachedSequentialQueueSongIds.contains(song.id) ||
           currentSong?.id == song.id;
-      if (affectsQueue && !shouldShowSongOutsideSearch(song)) {
+      final bool restrictedInQueue =
+          !shouldShowSongOutsideSearch(song) ||
+          ((_smartQueueSongIds.contains(song.id) ||
+                  _queueSongIds.contains(song.id)) &&
+              !_isShortEnoughForHomeAndSmartQueue(song));
+      if (affectsQueue && restrictedInQueue) {
         queueNeedsRestrictionPrune = true;
       }
     }
@@ -2655,19 +2681,25 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     bool syncPlayer = true,
     int? preferredContinuationIndex,
   }) {
+    bool keepQueueSong(String songId) {
+      final LibrarySong? song = songById(songId);
+      if (song == null || !shouldShowSongOutsideSearch(song)) {
+        return false;
+      }
+      if (_smartQueueSongIds.contains(songId) &&
+          !_isShortEnoughForHomeAndSmartQueue(song)) {
+        return false;
+      }
+      return true;
+    }
+
     final List<String> previousQueueSongIds = List<String>.from(_queueSongIds);
     final List<String> nextQueueSongIds = _queueSongIds
-        .where((String songId) {
-          final LibrarySong? song = songById(songId);
-          return song != null && shouldShowSongOutsideSearch(song);
-        })
+        .where(keepQueueSong)
         .toList(growable: false);
     final List<String> nextDetachedSequentialQueueSongIds =
         _detachedSequentialQueueSongIds
-            .where((String songId) {
-              final LibrarySong? song = songById(songId);
-              return song != null && shouldShowSongOutsideSearch(song);
-            })
+            .where(keepQueueSong)
             .toList(growable: false);
     if (listEquals(previousQueueSongIds, nextQueueSongIds) &&
         listEquals(
@@ -2691,6 +2723,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         .toList(growable: false);
     _queueSongIds = nextQueueSongIds;
     _detachedSequentialQueueSongIds = nextDetachedSequentialQueueSongIds;
+    _smartQueueSongIds.removeAll(removedSongIds);
 
     if (_queueSongIds.isEmpty) {
       _queueIndex = 0;
@@ -4332,12 +4365,14 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
   }) {
     final List<SongRecommendation> safeExisting = existing
         .where(
-          (SongRecommendation item) => !_isSongExplicitlyDisliked(item.song),
+          (SongRecommendation item) =>
+              _shouldUseSongInHomeOrSmartQueue(item.song),
         )
         .toList(growable: false);
     final List<SongRecommendation> safeIncoming = incoming
         .where(
-          (SongRecommendation item) => !_isSongExplicitlyDisliked(item.song),
+          (SongRecommendation item) =>
+              _shouldUseSongInHomeOrSmartQueue(item.song),
         )
         .toList(growable: false);
     if (existing.isEmpty) {
@@ -5005,6 +5040,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     _trendingNowError = null;
     await _saveSnapshot();
     notifyListeners();
+    _scheduleCloudPreferenceProfileSync();
     await loadTrendingNow(
       languageCode: preferredLanguageCode,
       countryCode: normalized,
@@ -5172,7 +5208,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
     for (final LibrarySong song in songs) {
       final String identityKey = _songIdentityKey(song);
       if (excludedIds.contains(song.id) ||
-          !shouldShowSongOutsideSearch(song) ||
+          !_shouldUseSongInHomeOrSmartQueue(song) ||
           song.isDisliked ||
           dislikedKeys.contains(identityKey)) {
         continue;
@@ -5422,9 +5458,9 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
 
     final LibrarySong? current = currentSong;
     final LibrarySong? anchor =
-        (seed != null && shouldShowSongOutsideSearch(seed))
+        (seed != null && _shouldUseSongInHomeOrSmartQueue(seed))
         ? seed
-        : (current != null && shouldShowSongOutsideSearch(current))
+        : (current != null && _shouldUseSongInHomeOrSmartQueue(current))
         ? current
         : null;
     if (anchor == null) {
@@ -5499,7 +5535,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       final LibrarySong? fallbackAnchor =
           current != null &&
               current.isRemote &&
-              shouldShowSongOutsideSearch(current)
+              _shouldUseSongInHomeOrSmartQueue(current)
           ? current
           : null;
       if (predictions.isEmpty &&
@@ -5555,6 +5591,9 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       for (final LibrarySong song in predictions) {
         if (_isDisposing || _isDisposed) {
           return;
+        }
+        if (!_shouldUseSongInHomeOrSmartQueue(song)) {
+          continue;
         }
         if (song.isDisliked || dislikedKeys.contains(_songIdentityKey(song))) {
           continue;
@@ -5680,6 +5719,9 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
 
   List<_RecommendationQuery> _buildHomeQueries(LibrarySong? seedSong) {
     final List<_TasteSignal> artists = _preferenceArtists();
+    final List<_TasteSignal> genres = _preferenceGenres();
+    final List<_LanguageSignal> languages =
+        _preferredLanguagesFromValidHistory();
     final _TasteProfile profile = _buildTasteProfile();
     final _SessionContext session = _sessionContext();
     final List<_RecommendationQuery> queries = <_RecommendationQuery>[];
@@ -5710,6 +5752,14 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
           anchor: seedSong,
         ),
       );
+      addQuery(
+        _RecommendationQuery(
+          title: 'More from ${seedSong.artist}',
+          subtitle: 'Artists and songs adjacent to your recent play',
+          query: '${seedSong.artist} popular songs',
+          anchor: seedSong,
+        ),
+      );
     }
 
     for (final _TasteSignal artist in artists.take(2)) {
@@ -5722,6 +5772,38 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
 
+    for (final _TasteSignal genre in genres.take(2)) {
+      addQuery(
+        _RecommendationQuery(
+          title: '${genre.label} for you',
+          subtitle: 'Genre picks driven by your listening patterns',
+          query: '$languageToken ${genre.label} songs',
+        ),
+      );
+    }
+
+    for (final _LanguageSignal language in languages.take(1)) {
+      addQuery(
+        _RecommendationQuery(
+          title: '${language.label} picks',
+          subtitle: 'Matches the language you finish most',
+          query: '${language.queryToken} songs you may like',
+        ),
+      );
+    }
+
+    final String topYear = profile.yearKeys.firstOrNull ?? '';
+    if (topYear.isNotEmpty) {
+      addQuery(
+        _RecommendationQuery(
+          title: '$topYear favorites',
+          subtitle: 'Release years that fit your listening pattern',
+          query: '$languageToken $topYear songs',
+          anchor: seedSong,
+        ),
+      );
+    }
+
     addQuery(
       _RecommendationQuery(
         title: '${session.label} for you',
@@ -5730,6 +5812,25 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         anchor: seedSong,
       ),
     );
+
+    if (queries.isEmpty) {
+      addQuery(
+        _RecommendationQuery(
+          title: 'Fresh discoveries',
+          subtitle:
+              'Start listening, liking, and finishing songs to personalize this section',
+          query: '$languageToken best songs playlist',
+        ),
+      );
+      addQuery(
+        _RecommendationQuery(
+          title: 'New for your library',
+          subtitle:
+              'A fallback shelf until your taste profile becomes stronger',
+          query: '$languageToken new music songs',
+        ),
+      );
+    }
 
     return queries;
   }
@@ -6269,16 +6370,6 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
 
-    final List<int> years = _rankedPreferenceSongs()
-        .map((LibrarySong song) => song.year)
-        .whereType<int>()
-        .where((int year) => year > 0)
-        .take(30)
-        .toList(growable: false);
-    final double averageYear = years.isEmpty
-        ? DateTime.now().year.toDouble()
-        : years.reduce((int a, int b) => a + b) / years.length;
-
     final Map<String, double> netArtistScores = _netScoreMap(
       positive: artistScores,
       negative: avoidedArtistScores,
@@ -6294,38 +6385,33 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       negative: avoidedMoodScores,
       negativeWeight: 1.1,
     );
-    final Map<String, double> netLanguageScores = _netScoreMap(
-      positive: languageScores,
-      negative: avoidedLanguageScores,
-      negativeWeight: 0.9,
-    );
-    final Map<String, double> netYearScores = _netScoreMap(
-      positive: yearScores,
-      negative: avoidedYearScores,
-      negativeWeight: 0.9,
-    );
-
     final List<String> artistOrder = _topScoreKeys(netArtistScores, limit: 6);
     final List<String> genreOrder = _topScoreKeys(netGenreScores, limit: 5);
     final List<String> moodOrder = _topScoreKeys(netMoodScores, limit: 4);
-    final List<String> languageOrder = _topScoreKeys(
-      netLanguageScores,
-      limit: 3,
-    );
-    final List<String> yearOrder = _topScoreKeys(netYearScores, limit: 4);
     final List<String> recentArtistOrder = _topScoreKeys(
       recentArtistScores,
       limit: 6,
     );
-    final String primaryLanguage =
-        languageOrder.firstOrNull ??
-        (_cloudPreferenceProfile.primaryLanguage.isNotEmpty
-            ? _cloudPreferenceProfile.primaryLanguage
-            : preferredLanguageCode);
-    final int? preferredYearFloor = _resolvePreferredYearFloor(
-      yearOrder,
-      fallbackYears: years,
-    );
+    final String regionalLanguage = preferredRegion.languageCode.trim();
+    final String forcedLanguage = regionalLanguage.isEmpty
+        ? 'unknown'
+        : regionalLanguage;
+    final Map<String, double> forcedLanguagePositiveScores =
+        forcedLanguage == 'unknown'
+        ? const <String, double>{}
+        : <String, double>{forcedLanguage: 1.0};
+    final Map<String, double> forcedLanguageNeutralScores =
+        forcedLanguage == 'unknown'
+        ? const <String, double>{}
+        : <String, double>{forcedLanguage: 0.0};
+    final int currentYear = DateTime.now().year;
+    final String currentYearKey = '$currentYear';
+    final Map<String, double> currentYearPositiveScores = <String, double>{
+      currentYearKey: 1.0,
+    };
+    final Map<String, double> currentYearNeutralScores = <String, double>{
+      currentYearKey: 0.0,
+    };
     final Set<String> repeatedSongs = <String>{};
     final Set<String> seenSongs = <String>{};
     int positiveKnownPlays = 0;
@@ -6377,34 +6463,32 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       artistKeys: artistOrder.toSet(),
       genreKeys: genreOrder.toSet(),
       moodKeys: moodOrder.toSet(),
-      languageKeys: languageOrder.toSet(),
-      yearKeys: yearOrder.toSet(),
-      prefersRecentYears:
-          (averageYear >= 2018) || _cloudPreferenceProfile.prefersRecentYears,
+      languageKeys: forcedLanguage == 'unknown'
+          ? const <String>{}
+          : <String>{forcedLanguage},
+      yearKeys: <String>{currentYearKey},
+      prefersRecentYears: true,
       artistScores: _trimScoreMap(netArtistScores, limit: 12),
       genreScores: _trimScoreMap(netGenreScores, limit: 10),
       moodScores: _trimScoreMap(netMoodScores, limit: 8),
-      languageScores: _trimScoreMap(netLanguageScores, limit: 6),
-      languageConfidenceScores: _trimScoreMap(
-        languageConfidenceScores,
-        limit: 6,
-      ),
-      yearScores: _trimScoreMap(netYearScores, limit: 8),
+      languageScores: forcedLanguagePositiveScores,
+      languageConfidenceScores: forcedLanguagePositiveScores,
+      yearScores: currentYearPositiveScores,
       avoidedArtistScores: _trimScoreMap(avoidedArtistScores, limit: 8),
       avoidedGenreScores: _trimScoreMap(avoidedGenreScores, limit: 8),
       avoidedMoodScores: _trimScoreMap(avoidedMoodScores, limit: 8),
-      avoidedLanguageScores: _trimScoreMap(avoidedLanguageScores, limit: 6),
-      avoidedYearScores: _trimScoreMap(avoidedYearScores, limit: 6),
+      avoidedLanguageScores: forcedLanguageNeutralScores,
+      avoidedYearScores: currentYearNeutralScores,
       recentArtistScores: _trimScoreMap(recentArtistScores, limit: 8),
       recentGenreScores: _trimScoreMap(recentGenreScores, limit: 6),
       recentMoodScores: _trimScoreMap(recentMoodScores, limit: 6),
-      recentLanguageScores: _trimScoreMap(recentLanguageScores, limit: 4),
-      recentYearScores: _trimScoreMap(recentYearScores, limit: 4),
+      recentLanguageScores: forcedLanguagePositiveScores,
+      recentYearScores: currentYearPositiveScores,
       skipArtistScores: _trimScoreMap(skipArtistScores, limit: 8),
       skipGenreScores: _trimScoreMap(skipGenreScores, limit: 6),
       skipMoodScores: _trimScoreMap(skipMoodScores, limit: 6),
-      skipLanguageScores: _trimScoreMap(skipLanguageScores, limit: 4),
-      skipYearScores: _trimScoreMap(skipYearScores, limit: 4),
+      skipLanguageScores: forcedLanguageNeutralScores,
+      skipYearScores: currentYearNeutralScores,
       energyScores: _trimScoreMap(energyScores, limit: 3),
       sessionContextScores: _trimScoreMap(sessionContextScores, limit: 5),
       sourceWeights: {
@@ -6425,10 +6509,9 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
               _cloudPreferenceProfile.completedListenCount > 0
           ? _cloudPreferenceProfile.repeatAffinity
           : repeatAffinity,
-      primaryLanguage: primaryLanguage,
-      secondaryLanguages: languageOrder.skip(1).toSet(),
-      preferredYearFloor:
-          preferredYearFloor ?? _cloudPreferenceProfile.preferredYearFloor,
+      primaryLanguage: forcedLanguage,
+      secondaryLanguages: const <String>{},
+      preferredYearFloor: currentYear,
     );
   }
 
@@ -6572,31 +6655,6 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       return null;
     }
     return '$year';
-  }
-
-  int? _parseYearKey(String key) {
-    final int? parsed = int.tryParse(key.trim());
-    if (parsed == null || parsed <= 0) {
-      return null;
-    }
-    return parsed;
-  }
-
-  int? _resolvePreferredYearFloor(
-    List<String> rankedYearKeys, {
-    required List<int> fallbackYears,
-  }) {
-    final List<int> preferredYears = rankedYearKeys
-        .map(_parseYearKey)
-        .whereType<int>()
-        .toList(growable: false);
-    if (preferredYears.isNotEmpty) {
-      return preferredYears.reduce(math.min);
-    }
-    if (fallbackYears.isEmpty) {
-      return null;
-    }
-    return fallbackYears.reduce(math.min);
   }
 
   bool _isExploratoryCandidate(
@@ -6949,7 +7007,7 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
       if (blockedIds.contains(song.id)) {
         continue;
       }
-      if (!shouldShowSongOutsideSearch(song)) {
+      if (!_shouldUseSongInHomeOrSmartQueue(song)) {
         continue;
       }
       if (song.isDisliked) {
@@ -7497,6 +7555,33 @@ class MusixController extends ChangeNotifier with WidgetsBindingObserver {
         continue;
       }
       labels[key] ??= song.artist;
+      scores[key] = (scores[key] ?? 0) + _songPreferenceWeight(song);
+    }
+
+    return scores.entries
+        .map(
+          (MapEntry<String, double> entry) =>
+              _TasteSignal(labels[entry.key] ?? entry.key, entry.value),
+        )
+        .toList()
+      ..sort((_TasteSignal a, _TasteSignal b) => b.score.compareTo(a.score));
+  }
+
+  List<_TasteSignal> _preferenceGenres() {
+    final Map<String, double> scores = Map<String, double>.from(
+      _cloudPreferenceProfile.genreScores,
+    );
+    final Map<String, String> labels = <String, String>{
+      for (final String key in _cloudPreferenceProfile.genreKeys) key: key,
+    };
+
+    for (final LibrarySong song in _rankedPreferenceSongs()) {
+      final String rawGenre = song.genre?.trim() ?? '';
+      if (rawGenre.isEmpty) {
+        continue;
+      }
+      final String key = _normalizeToken(rawGenre);
+      labels[key] ??= rawGenre;
       scores[key] = (scores[key] ?? 0) + _songPreferenceWeight(song);
     }
 

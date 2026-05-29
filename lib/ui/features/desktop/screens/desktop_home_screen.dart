@@ -102,6 +102,7 @@ class _DesktopHomeScreen extends StatelessWidget {
       controller,
     );
     final List<LibrarySong> jumpBackIn = controller.recentlyPlayedSongs
+        .where(controller.shouldShowSongOnHome)
         .take(4)
         .toList(growable: false);
     final _FeaturedHeroData? featured = _pickFeaturedHero(

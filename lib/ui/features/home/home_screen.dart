@@ -265,6 +265,7 @@ class _HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<_HomeScreen>
     with AutomaticKeepAliveClientMixin<_HomeScreen> {
   final ScrollController _scroll = ScrollController();
+  bool _animateHomeReveals = true;
 
   @override
   void initState() {
@@ -282,8 +283,19 @@ class _HomeScreenState extends State<_HomeScreen>
   @override
   bool get wantKeepAlive => true;
 
-  Future<void> _onScroll() async {
+  void _onScroll() {
     widget.controller.registerScrollActivity();
+    final ScrollDirection direction = _scroll.position.userScrollDirection;
+    final bool? shouldAnimate = switch (direction) {
+      ScrollDirection.reverse => true,
+      ScrollDirection.forward => false,
+      ScrollDirection.idle => null,
+    };
+    if (shouldAnimate != null && shouldAnimate != _animateHomeReveals) {
+      setState(() {
+        _animateHomeReveals = shouldAnimate;
+      });
+    }
     // Home recommendations are intentionally static for this app session.
   }
 
@@ -342,6 +354,7 @@ class _HomeScreenState extends State<_HomeScreen>
       controller,
     );
     final List<LibrarySong> jumpBackIn = controller.recentlyPlayedSongs
+        .where(controller.shouldShowSongOnHome)
         .take(4)
         .toList(growable: false);
     final _FeaturedHeroData? featured = _pickFeaturedHero(
@@ -371,127 +384,133 @@ class _HomeScreenState extends State<_HomeScreen>
               color: _kAccent,
               backgroundColor: _kSurface,
               onRefresh: _refreshHome,
-              child: ListView(
-                controller: _scroll,
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: _rootScreenContentPadding(
-                  context,
-                  hasMiniPlayer: controller.miniPlayerSong != null,
-                ),
-                children: <Widget>[
-                  const _MusixTopBar(),
-                  const SizedBox(height: 14),
-                  if (showRecommendationLoadingState)
-                    const _MusixHeroSkeleton()
-                  else if (featured != null)
-                    _MusixHeroCard(
-                      badge: featured.badge,
-                      title: featured.title,
-                      subtitle: featured.subtitle,
-                      imageUrl: featured.imageUrl,
-                      onListenNow: featured.onListenNow,
-                    )
-                  else
-                    _PersonalizationHintCard(
-                      message: emptyStateMessages.heroMessage,
-                    ),
-                  const SizedBox(height: 18),
-                  _MusixSectionHeader(
-                    title: _HomeText.mayYouLike,
-                    onViewAll: () {
-                      if (mayYouLikeFull.isEmpty) {
-                        widget.onOpenSearch();
-                        return;
-                      }
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (BuildContext context) =>
-                              _MayYouLikeScreen(controller: controller),
-                        ),
-                      );
-                    },
+              child: _HomeRevealAnimationScope(
+                animateReveals: _animateHomeReveals,
+                child: ListView(
+                  controller: _scroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: _rootScreenContentPadding(
+                    context,
+                    hasMiniPlayer: controller.miniPlayerSong != null,
                   ),
-                  const SizedBox(height: 10),
-                  if (showRecommendationLoadingState)
-                    const _MusixListSkeleton(count: 4)
-                  else if (mayYouLike.isEmpty)
-                    _PersonalizationHintCard(
-                      message: emptyStateMessages.mayYouLikeMessage,
-                    )
-                  else
-                    _ProgressiveListReveal(
-                      itemCount: mayYouLike.length,
-                      showTrailingPlaceholders: true,
-                      itemBuilder: (BuildContext context, int index) {
-                        final LibrarySong song = mayYouLike[index];
-                        return _MusixPopularTrackTile(
-                          index: index + 1,
-                          song: song,
-                          controller: controller,
-                          onTap: () {
-                            if (song.isRemote) {
-                              controller.playOnlineSong(song);
-                            } else {
-                              controller.playSong(song, label: 'May you like');
-                            }
-                          },
-                        );
-                      },
-                    ),
-                  if (showRecommendationLoadingState) ...<Widget>[
-                    const SizedBox(height: 18),
-                    const _RecommendationShelfSkeleton(),
-                    const SizedBox(height: 18),
-                    const _TopArtistsLoadingBlock(),
-                  ] else ...<Widget>[
-                    if (featuredArtistSection != null)
-                      _buildHomeShelf(
-                        context: context,
-                        controller: controller,
-                        section: featuredArtistSection,
+                  children: <Widget>[
+                    const _MusixTopBar(),
+                    const SizedBox(height: 14),
+                    if (showRecommendationLoadingState)
+                      const _MusixHeroSkeleton()
+                    else if (featured != null)
+                      _MusixHeroCard(
+                        badge: featured.badge,
+                        title: featured.title,
+                        subtitle: featured.subtitle,
+                        imageUrl: featured.imageUrl,
+                        onListenNow: featured.onListenNow,
+                      )
+                    else
+                      _PersonalizationHintCard(
+                        message: emptyStateMessages.heroMessage,
                       ),
                     const SizedBox(height: 18),
-                    const _MusixSectionHeader(title: _HomeText.topArtists),
-                    const SizedBox(height: 10),
-                    _TopArtistsSection(controller: controller),
-                    ..._buildMoreShelves(
-                      context: context,
-                      controller: controller,
-                      includeFeaturedArtistSection: false,
-                    ),
-                  ],
-                  if (!controller.homeLoading &&
-                      jumpBackIn.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: 18),
                     _MusixSectionHeader(
-                      title: _HomeText.jumpBackIn,
+                      title: _HomeText.mayYouLike,
                       onViewAll: () {
+                        if (mayYouLikeFull.isEmpty) {
+                          widget.onOpenSearch();
+                          return;
+                        }
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (BuildContext context) =>
-                                _RecentPlaysScreen(controller: controller),
+                                _MayYouLikeScreen(controller: controller),
                           ),
                         );
                       },
                     ),
                     const SizedBox(height: 10),
-                    _MusixJumpBackGrid(
-                      items: jumpBackIn,
-                      onTapItem: (LibrarySong song) {
-                        if (song.isRemote) {
-                          controller.playOnlineSong(song);
-                        } else {
-                          controller.playSong(song, label: 'Jump back in');
-                        }
-                      },
-                    ),
+                    if (showRecommendationLoadingState)
+                      const _MusixListSkeleton(count: 4)
+                    else if (mayYouLike.isEmpty)
+                      _PersonalizationHintCard(
+                        message: emptyStateMessages.mayYouLikeMessage,
+                      )
+                    else
+                      _ProgressiveListReveal(
+                        itemCount: mayYouLike.length,
+                        showTrailingPlaceholders: true,
+                        itemBuilder: (BuildContext context, int index) {
+                          final LibrarySong song = mayYouLike[index];
+                          return _MusixPopularTrackTile(
+                            index: index + 1,
+                            song: song,
+                            controller: controller,
+                            onTap: () {
+                              if (song.isRemote) {
+                                controller.playOnlineSong(song);
+                              } else {
+                                controller.playSong(
+                                  song,
+                                  label: 'May you like',
+                                );
+                              }
+                            },
+                          );
+                        },
+                      ),
+                    if (showRecommendationLoadingState) ...<Widget>[
+                      const SizedBox(height: 18),
+                      const _RecommendationShelfSkeleton(),
+                      const SizedBox(height: 18),
+                      const _TopArtistsLoadingBlock(),
+                    ] else ...<Widget>[
+                      if (featuredArtistSection != null)
+                        _buildHomeShelf(
+                          context: context,
+                          controller: controller,
+                          section: featuredArtistSection,
+                        ),
+                      const SizedBox(height: 18),
+                      const _MusixSectionHeader(title: _HomeText.topArtists),
+                      const SizedBox(height: 10),
+                      _TopArtistsSection(controller: controller),
+                      ..._buildMoreShelves(
+                        context: context,
+                        controller: controller,
+                        includeFeaturedArtistSection: false,
+                      ),
+                    ],
+                    if (!controller.homeLoading &&
+                        jumpBackIn.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 18),
+                      _MusixSectionHeader(
+                        title: _HomeText.jumpBackIn,
+                        onViewAll: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (BuildContext context) =>
+                                  _RecentPlaysScreen(controller: controller),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      _MusixJumpBackGrid(
+                        items: jumpBackIn,
+                        onTapItem: (LibrarySong song) {
+                          if (song.isRemote) {
+                            controller.playOnlineSong(song);
+                          } else {
+                            controller.playSong(song, label: 'Jump back in');
+                          }
+                        },
+                      ),
+                    ],
+                    if (controller.homeLoading &&
+                        !hasRevealableContent) ...<Widget>[
+                      const SizedBox(height: 16),
+                      const Opacity(opacity: 0.8, child: _HomeFeedSkeleton()),
+                    ],
                   ],
-                  if (controller.homeLoading &&
-                      !hasRevealableContent) ...<Widget>[
-                    const SizedBox(height: 16),
-                    const Opacity(opacity: 0.8, child: _HomeFeedSkeleton()),
-                  ],
-                ],
+                ),
               ),
             ),
           ),
@@ -536,7 +555,9 @@ class _HomeOfflineState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<LibrarySong> localSongs = controller.browsableSongs
-        .where((LibrarySong song) => !song.isRemote)
+        .where((LibrarySong song) {
+          return !song.isRemote && controller.shouldShowSongOnHome(song);
+        })
         .take(6)
         .toList(growable: false);
     return DecoratedBox(
@@ -743,9 +764,6 @@ List<HomeFeedSection> _filteredHomeFeedSections(
         if (key == 'trending now' || key == 'chill rotation') {
           return false;
         }
-        if (_isRemovedHomeShelfTitle(key)) {
-          return false;
-        }
         if (key.startsWith('because you finished')) {
           return false;
         }
@@ -759,35 +777,6 @@ List<HomeFeedSection> _filteredHomeFeedSections(
       })
       .toList(growable: false);
 }
-
-bool _isRemovedHomeShelfTitle(String key) {
-  if (key == 'fresh discoveries' || key == 'new for your library') {
-    return true;
-  }
-  if (key.startsWith('more from ')) {
-    return true;
-  }
-  if (RegExp(r'^\d{4} favorites$').hasMatch(key)) {
-    return true;
-  }
-  if (key.endsWith(' picks')) {
-    return true;
-  }
-  if (key.endsWith(' for you') &&
-      !_allowedSessionHomeShelfTitles.contains(key)) {
-    return true;
-  }
-  return false;
-}
-
-const Set<String> _allowedSessionHomeShelfTitles = <String>{
-  'late night for you',
-  'morning for you',
-  'daytime for you',
-  'evening for you',
-  'weekend evening for you',
-  'night for you',
-};
 
 bool _isQuickPickSection(HomeFeedSection section) {
   return section.title.trim().toLowerCase().startsWith('inspired by ');
@@ -1273,8 +1262,8 @@ class _SearchGenreShelf {
 List<_SearchGenreShelf> _buildSearchGenreShelves(MusixController controller) {
   final List<LibrarySong> pool = <LibrarySong>[
     ..._resolvedMayYouLikeSongs(controller),
-    ...controller.recentlyAddedSongs,
-    ...controller.browsableSongs,
+    ...controller.recentlyAddedSongs.where(controller.shouldShowSongOnHome),
+    ...controller.browsableSongs.where(controller.shouldShowSongOnHome),
   ];
 
   LibrarySong? pickSong(List<String> tokens) {
@@ -1346,7 +1335,12 @@ List<SongRecommendation> _resolvedMayYouLikeRecommendations(
   MusixController controller,
 ) {
   if (controller.personalizedHomeRecommendations.isNotEmpty) {
-    return controller.personalizedHomeRecommendations;
+    return controller.personalizedHomeRecommendations
+        .where(
+          (SongRecommendation item) =>
+              controller.shouldShowSongOnHome(item.song),
+        )
+        .toList(growable: false);
   }
   return _buildMayYouLike(controller.homeFeed)
       .map(
@@ -2656,6 +2650,9 @@ class _RecentPlaysScreen extends StatelessWidget {
       selector: (_, MusixController c) => c.recentlyPlayedSongs,
       builder: (BuildContext context, List<LibrarySong> songs, Widget? _) {
         final MusixController liveController = context.read<MusixController>();
+        final List<LibrarySong> visibleSongs = songs
+            .where(liveController.shouldShowSongOnHome)
+            .toList(growable: false);
 
         return _MusixSubscreenScaffold(
           title: _HomeText.jumpBackIn,
@@ -2684,7 +2681,7 @@ class _RecentPlaysScreen extends StatelessWidget {
                     },
             ),
           ],
-          child: songs.isEmpty
+          child: visibleSongs.isEmpty
               ? Builder(
                   builder: (BuildContext context) {
                     return Text(
@@ -2696,9 +2693,9 @@ class _RecentPlaysScreen extends StatelessWidget {
                   },
                 )
               : _ProgressiveListReveal(
-                  itemCount: songs.length,
+                  itemCount: visibleSongs.length,
                   itemBuilder: (BuildContext context, int index) {
-                    final LibrarySong song = songs[index];
+                    final LibrarySong song = visibleSongs[index];
                     return _SimplePlaybackTile(
                       song: song,
                       onTap: () {
@@ -3100,6 +3097,25 @@ class _ProgressiveListRevealState extends State<_ProgressiveListReveal> {
   }
 }
 
+class _HomeRevealAnimationScope extends InheritedWidget {
+  const _HomeRevealAnimationScope({
+    required this.animateReveals,
+    required super.child,
+  });
+
+  final bool animateReveals;
+
+  static _HomeRevealAnimationScope? maybeOf(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<_HomeRevealAnimationScope>();
+  }
+
+  @override
+  bool updateShouldNotify(_HomeRevealAnimationScope oldWidget) {
+    return animateReveals != oldWidget.animateReveals;
+  }
+}
+
 class _RevealIn extends StatelessWidget {
   const _RevealIn({super.key, required this.child});
 
@@ -3107,6 +3123,21 @@ class _RevealIn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final _HomeRevealAnimationScope? revealScope =
+        _HomeRevealAnimationScope.maybeOf(context);
+    if (revealScope != null && !revealScope.animateReveals) {
+      return child;
+    }
+
+    final ScrollableState? scrollable = Scrollable.maybeOf(context);
+    final bool animate =
+        revealScope != null ||
+        scrollable == null ||
+        scrollable.position.userScrollDirection != ScrollDirection.forward;
+    if (!animate) {
+      return child;
+    }
+
     return TweenAnimationBuilder<double>(
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
