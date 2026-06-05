@@ -20,7 +20,7 @@
 | Platform | Package | Link | Notes |
 |---|---|---|---|
 | Android | APK | [Latest Release](https://github.com/sachicodex/Musix/releases/latest) | Install from release assets on your device. |
-| Windows | EXE installer | [Latest Release](https://github.com/sachicodex/Musix/releases/latest) | Recommended install; includes custom window chrome and system media controls. |
+| Windows | EXE | [Latest Release](https://github.com/sachicodex/Musix/releases/latest) | Recommended install; includes custom window chrome and system media controls. |
 | Linux / macOS / iOS | Build from source | [Run From Source](#run-from-source) | Use Flutter build commands for your target platform. |
 
 ## About
@@ -54,16 +54,16 @@ Musix helps you listen your way:
 | &#128276; | Media controls | Android playback notification and Windows system media integration. |
 | &#128187; | Desktop layout | Sidebar navigation, content panels, and optional now-playing rail. |
 
-## Mobile Gestures
+## Touch Controls
 
-| Gesture | Action |
-|---|---|
-| Swipe left/right on main shell | Switch tab (left = next, right = previous): Home → Search → Library → Profile. |
-| Swipe left on search result | Add song to queue. |
-| Swipe left/right on player (fast horizontal flick) | Next / previous track. |
-| Swipe up on player (fast vertical flick) | Open queue sheet. |
-| Swipe down on player (fast vertical flick) | Close player and return to previous screen. |
-| Pull to refresh on Library | Rescan / refresh library content. |
+The app uses a few simple touch gestures:
+
+- Swipe left or right on the main screen to switch between Home, Search, Library, and Profile.
+- Swipe left on a search result to add the song to the queue.
+- Swipe left or right on the player with a fast flick to go to the next or previous track.
+- Swipe up on the player with a fast flick to open the queue.
+- Swipe down on the player with a fast flick to close the player and return to the previous screen.
+- Pull down in Library to refresh and rescan your music.
 
 ## Desktop Keyboard Shortcuts
 
@@ -132,7 +132,7 @@ flutter build windows --release
 
 ### Windows Installer (Inno Setup)
 
-Musix uses a normal Inno Setup EXE installer instead of MSIX.
+Musix uses a normal Inno Setup EXE installer.
 
 Prerequisites:
 - Install **Inno Setup 6**.
@@ -249,7 +249,7 @@ If Firebase is not configured, the app shows a **Firebase Setup Required** scree
 
 - **Streaming**: Resolves playback URLs with ranked fallbacks; optional local proxy caching reduces re-buffering.
 - **Android**: Media-style playback notification with transport controls when a track is active.
-- **Windows**: System media controls integration for play/pause/skip from the OS shell.
+- **Windows**: System media controls integration for play/pause/skip from Windows controls.
 - **Permissions**: Notification permission may be requested on Android when playback starts.
 - **Windows note**: the Inno Setup installer (`installer\Musix.iss`) is the recommended distribution format.
 
@@ -268,9 +268,9 @@ lib/
   services/              Firebase Auth and Firestore user data
   screens/               Auth gate, login/signup, Firebase setup
   ui/
-    shell/               App shell, navigation, shortcuts
+    navigation/          App navigation, shortcuts
     features/            Home, search, library, player, profile
-    features/desktop/    Desktop shell, sidebar, screens, widgets
+    features/desktop/    Desktop layout, sidebar, screens, widgets
 assets/
   icons/                 App logos (Android, Windows, full)
   images/                Genre artwork
