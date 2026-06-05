@@ -20,7 +20,7 @@
 | Platform | Package | Link | Notes |
 |---|---|---|---|
 | Android | APK | [Latest Release](https://github.com/sachicodex/Musix/releases/latest) | Install from release assets on your device. |
-| Windows | MSIX | [Latest Release](https://github.com/sachicodex/Musix/releases/latest) | Recommended install; includes custom window chrome and system media controls. |
+| Windows | EXE installer | [Latest Release](https://github.com/sachicodex/Musix/releases/latest) | Recommended install; includes custom window chrome and system media controls. |
 | Linux / macOS / iOS | Build from source | [Run From Source](#run-from-source) | Use Flutter build commands for your target platform. |
 
 ## About
@@ -126,10 +126,66 @@ flutter run -d macos
 # Android APK
 flutter build apk --release
 
-# Windows (then MSIX)
+# Windows installer
 flutter build windows --release
-dart run msix:create
 ```
+
+### Windows Installer (Inno Setup)
+
+Musix uses a normal Inno Setup EXE installer instead of MSIX.
+
+Prerequisites:
+- Install **Inno Setup 6**.
+- Build the Windows release first: `flutter build windows --release`.
+
+The installer script is saved at:
+
+```text
+installer\Musix.iss
+```
+
+To compile from VS Code:
+
+1. Press `Ctrl + Shift + B`.
+2. Choose `Release: Build Windows Installer`.
+3. VS Code runs the Flutter Windows release build, then compiles `installer\Musix.iss`.
+4. The setup EXE is created at `installer\Output\Musix-Setup.exe`.
+
+To compile from Inno Setup:
+
+1. Open `installer\Musix.iss` in Inno Setup Compiler.
+2. Click **Compile**.
+3. The setup EXE is created at `installer\Output\Musix-Setup.exe`.
+
+Script Wizard settings used for Musix:
+
+| Wizard page | Value |
+|---|---|
+| Application name | `Musix` |
+| Application version | `4.3.17` |
+| Publisher | `Sachicodex` |
+| Destination base folder | `(Custom)` |
+| Custom destination folder | `{localappdata}\Programs` |
+| Application folder name | `Musix` |
+| Install mode | Non administrative install mode, current user only |
+| Main executable | `build\windows\x64\runner\Release\Musix.exe` |
+| Other application files | Add the full `build\windows\x64\runner\Release` folder |
+| File association | Disabled |
+| Start Menu shortcut | Enabled |
+| Desktop shortcut option | Enabled |
+| Documentation files | Blank |
+| Registry import file | Blank |
+| Output base file name | `Musix-Setup` |
+| Setup password | Blank |
+| Preprocessor directives | Enabled |
+
+This installs to:
+
+```text
+%LOCALAPPDATA%\Programs\Musix
+```
+
+That keeps installation user-friendly and avoids requiring admin rights.
 
 ## Setup A-Z (Firebase Auth + Firestore)
 
@@ -195,7 +251,7 @@ If Firebase is not configured, the app shows a **Firebase Setup Required** scree
 - **Android**: Media-style playback notification with transport controls when a track is active.
 - **Windows**: System media controls integration for play/pause/skip from the OS shell.
 - **Permissions**: Notification permission may be requested on Android when playback starts.
-- **Windows note**: MSIX install (`dart run msix:create`) is the recommended distribution format.
+- **Windows note**: the Inno Setup installer (`installer\Musix.iss`) is the recommended distribution format.
 
 ## Supported Local Audio Formats
 
@@ -232,7 +288,7 @@ assets/
 | Local tags | `audiotags` |
 | Auth & cloud | Firebase Auth, Cloud Firestore |
 | Desktop window | `window_manager` |
-| Windows packaging | `msix` |
+| Windows packaging | Inno Setup |
 | Connectivity | `connectivity_plus` |
 
 ## Publisher

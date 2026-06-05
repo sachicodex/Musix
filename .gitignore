@@ -33,6 +33,9 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Windows installer output
+/installer/Output/
+
 # Symbolication related
 app.*.symbols
 

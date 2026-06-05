@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Flutter: Build Windows Release",
+      "type": "shell",
+      "command": "flutter",
+      "args": [
+        "build",
+        "windows",
+        "--release"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Inno Setup: Compile Musix Installer",
+      "type": "process",
+      "command": "${env:LOCALAPPDATA}\\Programs\\Inno Setup 6\\ISCC.exe",
+      "args": [
+        "${workspaceFolder}\\installer\\Musix.iss"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Release: Build Windows Installer",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Flutter: Build Windows Release",
+        "Inno Setup: Compile Musix Installer"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}
