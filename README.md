@@ -167,17 +167,21 @@ Script Wizard settings used for Musix:
 | Destination base folder | `(Custom)` |
 | Custom destination folder | `{localappdata}\Programs` |
 | Application folder name | `Musix` |
-| Install mode | Non administrative install mode, current user only |
 | Main executable | `build\windows\x64\runner\Release\Musix.exe` |
 | Other application files | Add the full `build\windows\x64\runner\Release` folder |
 | File association | Disabled |
 | Start Menu shortcut | Enabled |
 | Desktop shortcut option | Enabled |
 | Documentation files | Blank |
+| Install mode | Non administrative install mode, current user only |
 | Registry import file | Blank |
+| Project root folder | installer |
+| Installer subfolder | Output |
+| Compiler output folder | Output |
 | Output base file name | `Musix-Setup` |
 | Setup password | Blank |
 | Preprocessor directives | Enabled |
+| ISS file location | installer |
 
 This installs to:
 
