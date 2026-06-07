@@ -11,7 +11,7 @@
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
-AppId={{0B5F87F9-58E9-478D-85E1-568A3F0DEED8}
+AppId={{FC4C3708-8296-446C-AAAB-18E9A71363D5}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 ;AppVerName={#MyAppName} {#MyAppVersion}
@@ -32,7 +32,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
 ; Remove the following line to run in administrative install mode (install for all users).
 PrivilegesRequired=lowest
+OutputDir=F:\02 Soft Dev\Flutter Development\Musix\installer\Output
 OutputBaseFilename=Musix-Setup
+SetupIconFile=F:\02 Soft Dev\Flutter Development\Musix\assets\icons\Musix.ico
 SolidCompression=yes
 WizardStyle=modern dynamic
 
@@ -43,7 +45,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Excludes: "*.exp,*.lib,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "F:\02 Soft Dev\Flutter Development\Musix\build\windows\x64\runner\Release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "F:\02 Soft Dev\Flutter Development\Musix\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
